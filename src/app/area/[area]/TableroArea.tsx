@@ -232,8 +232,8 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
                 <h2 className="text-2xl font-extrabold sm:text-3xl">Modelo · {modelo.pedido}</h2>
                 <p className="text-lg text-gray-600 sm:text-xl">{modelo.titulo}</p>
               </div>
-              <button onClick={() => setModelo(null)} className="rounded-2xl bg-gray-200 px-5 py-3 text-xl font-bold active:scale-95">
-                Cerrar
+              <button onClick={() => setModelo(null)} className="shrink-0 rounded-2xl bg-marca px-5 py-3 text-xl font-bold text-white active:scale-95">
+                ← Volver
               </button>
             </div>
             <div className="mt-4 flex flex-1 gap-3 overflow-auto">
