@@ -41,7 +41,7 @@ export async function GET(request: Request) {
       { header: "Prendas terminadas", key: "prendas", width: 20 },
       { header: "Capacidad por día (prendas)", key: "capacidadDia", width: 26 },
       { header: "Uso de capacidad %", key: "usoPct", width: 20 },
-      { header: "Bloques con tiempo medido", key: "medidos", width: 24 },
+      { header: "Bloques con tiempo medido (incluye los en proceso que ya se pasaron)", key: "medidos", width: 34 },
       { header: "Horas reales", key: "horasReales", width: 14 },
       { header: "Horas planificadas", key: "horasPlan", width: 20 },
       { header: "Desviación %", key: "desviacion", width: 14 },
@@ -56,7 +56,7 @@ export async function GET(request: Request) {
     ],
     r.areas.map((a) => ({
       ...a,
-      desviacion: a.horasPlan > 0 ? Math.round((a.horasReales / a.horasPlan - 1) * 100) : null,
+      desviacion: a.desviacion === null ? null : Math.round(a.desviacion * 100),
       usoPct: Math.round(a.uso * 1000) / 10,
       critica: r.critica?.area === a.area ? "Sí" : "",
     })),
@@ -113,6 +113,17 @@ export async function GET(request: Request) {
     r.cubetas.flatMap((c, i) =>
       r.areas.map((a) => ({ periodo: c.clave, diasHabiles: c.diasHabiles, area: a.nombre, prendas: r.produccion[a.area][i] })),
     ),
+  );
+
+  hoja(
+    libro,
+    "Por tipo de prenda",
+    [
+      { header: "Prenda", key: "prenda", width: 34 },
+      { header: "Prendas aceptadas", key: "aceptadas", width: 18 },
+      { header: "Prendas terminadas", key: "terminadas", width: 20 },
+    ],
+    r.porPrenda,
   );
 
   hoja(
@@ -207,13 +218,15 @@ export async function GET(request: Request) {
       { header: "Horas planificadas", key: "horasPlan", width: 20 },
       { header: "Diferencia (h)", key: "diferencia", width: 14 },
       { header: "Horas de reloj (sin repartir)", key: "horasReloj", width: 26 },
+      { header: "Sigue en proceso", key: "enCurso", width: 16 },
     ],
-    r.tramos.map((t) => ({
+    [...r.tramos, ...r.enCurso].map((t) => ({
       ...t,
+      enCurso: t.enCurso ? "Sí" : "",
       area: nombreArea[t.area],
       inicio: enPeru(t.inicio),
       llegada: enPeru(t.llegada),
-      fin: enPeru(t.fin),
+      fin: t.enCurso ? "" : enPeru(t.fin),
       diferencia: t.horasReales === null ? null : Math.round((t.horasReales - t.horasPlan) * 10) / 10,
     })),
   );

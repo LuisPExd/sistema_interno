@@ -14,20 +14,20 @@ export const COLOR = {
 export const horas = (n: number) => `${String(Math.round(n * 10) / 10).replace(".", ",")} h`;
 
 export function Figura({
-  pregunta,
+  titulo,
   nota,
   children,
   className = "",
 }: {
-  /** El título es la pregunta que la gráfica responde. */
-  pregunta: string;
+  /** Qué muestra la gráfica, sin interpretarla. */
+  titulo: string;
   nota?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
 }) {
   return (
     <figure className={`rounded-2xl bg-white p-5 shadow-sm ${className}`}>
-      <figcaption className="text-xl font-extrabold text-gray-900">{pregunta}</figcaption>
+      <figcaption className="text-xl font-extrabold text-gray-900">{titulo}</figcaption>
       {nota && <p className="mt-0.5 text-base text-gray-600">{nota}</p>}
       <div className="mt-4">{children}</div>
     </figure>
@@ -92,19 +92,25 @@ export function BarrasApiladas({
   filas,
   colores,
   textoAbajo = false,
+  ancha = false,
+  tope: topeFijo,
 }: {
   filas: FilaApilada[];
   colores: string[];
+  /** Nombres largos (tipos de prenda): la columna del nombre es más ancha. */
+  ancha?: boolean;
+  /** Valor que ocupa todo el ancho; por defecto, la fila más larga. */
+  tope?: number;
   /** En tarjetas angostas el texto va debajo de la barra, para que la barra use todo el ancho. */
   textoAbajo?: boolean;
 }) {
-  const tope = Math.max(...filas.map((f) => f.partes.reduce((n, v) => n + v, 0)), 0);
+  const tope = topeFijo ?? Math.max(...filas.map((f) => f.partes.reduce((n, v) => n + v, 0)), 0);
   return (
     <ul className="space-y-1">
       {filas.map((f) => {
         const contenido = (
           <>
-            <span className="flex items-center gap-2 truncate text-lg font-bold text-gray-900">{f.nombre}</span>
+            <span className={`text-lg font-bold text-gray-900 ${ancha ? "leading-tight" : "truncate"}`}>{f.nombre}</span>
             <span className={textoAbajo ? "block min-w-0" : "flex min-w-0 items-center gap-3 max-md:block"}>
               <span
                 className={`flex h-6 items-stretch gap-[2px] rounded-r ${textoAbajo ? "" : "flex-1"}`}
@@ -133,7 +139,7 @@ export function BarrasApiladas({
             </span>
           </>
         );
-        const clase = `grid grid-cols-[7.5rem_1fr] items-start gap-3 rounded-xl px-2 py-1.5 max-md:grid-cols-[6rem_1fr] ${f.activa ? "bg-marca-suave ring-2 ring-marca" : ""}`;
+        const clase = `grid ${ancha ? "grid-cols-[14rem_1fr] max-md:grid-cols-[8rem_1fr]" : "grid-cols-[7.5rem_1fr] max-md:grid-cols-[6rem_1fr]"} items-start gap-3 rounded-xl px-2 py-1.5 ${f.activa ? "bg-marca-suave ring-2 ring-marca" : ""}`;
         return (
           <li key={f.clave}>
             {f.href ? (
@@ -189,7 +195,8 @@ export function TablaDeCalor({
                     className="min-w-14 rounded px-2 py-1.5 font-bold"
                     style={{
                       background: v === 0 ? COLOR.pista : `rgba(42, 120, 214, ${0.18 + fuerza * 0.82})`,
-                      color: v === 0 ? "#b4b3ad" : fuerza > 0.5 ? "#fff" : "#0b0b0b",
+                      // El texto oscuro se lee en todos los tonos; el blanco no, en los medios.
+                      color: v === 0 ? "#b4b3ad" : "#0b0b0b",
                     }}
                   >
                     {v === 0 ? "·" : v}

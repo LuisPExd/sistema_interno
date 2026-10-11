@@ -290,6 +290,8 @@ export type Tarjeta = {
   titulo: string;
   detalle: string;
   cantidad: number;
+  /** Tipos de prenda que lleva: uno en un bloque, varios en un pedido que está en Almacén. */
+  prendas: { nombre: string; cantidad: number }[];
   estado: "en_cola" | "en_proceso" | "detenido";
   inicio: string | null;
   horasEsperadas: number;
@@ -329,6 +331,7 @@ function tarjetasDe(area: AreaId, pedidos: PedidoFila[], problemas: Map<string, 
         titulo: "Tela e insumos",
         detalle: p.pedido_items.map(describirItem).join(" · "),
         cantidad: prendas,
+        prendas: p.pedido_items.map((i) => ({ nombre: buscarProducto(i.producto)?.nombre ?? i.producto, cantidad: i.cantidad })),
         estado: p.almacen_estado,
         inicio: p.almacen_inicio,
         horasEsperadas: Math.max(ALMACEN.minimoDias, prendas / ALMACEN.prendasPorDia) * HORAS_POR_DIA,
@@ -359,6 +362,7 @@ function tarjetasDe(area: AreaId, pedidos: PedidoFila[], problemas: Map<string, 
           .filter(Boolean)
           .join(" · "),
         cantidad: b.cantidad,
+        prendas: [{ nombre: (item && buscarProducto(item.producto)?.nombre) ?? FAMILIAS[b.familia].nombre, cantidad: b.cantidad }],
         estado: b.estado,
         inicio: b.inicio_paso,
         horasEsperadas: horasEsperadas(area, b.familia, b.cantidad),

@@ -61,6 +61,8 @@ export type Tramo = {
   horasPlan: number;
   /** Parte de lo planificado que es esperar la compra de tela: no ocupa al área. */
   horasCompra: number;
+  /** Todavía no termina: `fin` es el momento del reporte y las horas son las que lleva. */
+  enCurso: boolean;
 };
 
 export type Problema = {
@@ -83,6 +85,8 @@ export type Entrega = {
   /** Primera fecha que se le prometió al cliente: reprogramar no la cambia. */
   prometido: string | null;
   reprogramado: boolean;
+  /** Qué lleva el pedido: "130 Polo camisero · 50 Pantalón industrial". */
+  detalle: string;
   /** Cuándo salió de la planta su último bloque. */
   listo: string;
   /** Cuándo lo recibió el cliente; null si todavía no. */
@@ -97,8 +101,13 @@ export type ResumenArea = {
   /** Bloques que terminó el área en el periodo. */
   tramos: number;
   prendas: number;
-  /** Bloques con hora de inicio y de fin: solo de estos salen los tiempos. */
+  /**
+   * Bloques de los que salen los tiempos: los terminados con hora de inicio y de fin, más los que
+   * siguen en proceso y ya se pasaron de lo planificado (cuentan con las horas que llevan).
+   */
   medidos: number;
+  /** Horas reales sobre planificadas, menos 1: 0,25 es un 25 % por encima. null sin bloques medidos. */
+  desviacion: number | null;
   horasReales: number;
   /** Horas planificadas de los bloques medidos, para compararlas con las reales. */
   horasPlan: number;
@@ -149,14 +158,28 @@ export type Reporte = {
    * recibe. Si esos días superan los trabajados, se aceptó más de lo que la planta puede producir.
    */
   demanda: { prendas: number; pedidos: number; diasNecesarios: number; limita: AreaId } | null;
-  /** Pedidos que quedaron listos, por semana (o por mes en periodos largos): por día son muy pocos. */
-  cumplimiento: { unidad: "semana" | "mes"; etiquetas: string[]; aTiempo: number[]; tarde: number[] };
+  /** Por semana (o por mes en periodos largos): pedidos y entregas son muy pocos para verlos por día. */
+  porSemana: {
+    unidad: "semana" | "mes";
+    etiquetas: string[];
+    diasHabiles: number[];
+    /** Prendas de los pedidos aceptados y prendas que salieron de la planta. */
+    aceptadas: number[];
+    terminadas: number[];
+    /** Pedidos que quedaron listos. */
+    aTiempo: number[];
+    tarde: number[];
+  };
+  /** Prendas aceptadas y terminadas en el periodo por tipo de prenda, de más a menos. */
+  porPrenda: { prenda: string; aceptadas: number; terminadas: number }[];
+  /** Lo que está en proceso al momento del reporte, con las horas que lleva. */
+  enCurso: Tramo[];
   /** "2026-10", en orden. */
   meses: string[];
   problemasPorMes: Record<AreaId, number[]>;
   motivos: { motivo: string; veces: number }[];
   problemasPorMotivo: Record<AreaId, number[]>;
-  /** Área que más horas acumuló sobre lo planificado; a igualdad, la de más problemas. */
+  /** Área que más se pasó de lo planificado en proporción; a igualdad, la de más problemas. */
   critica: ResumenArea | null;
 };
 
@@ -267,6 +290,31 @@ export function calcularReporte(
   // Días que cada área necesita para la mezcla de prendas que la planta terminó en el periodo.
   const cargaMezcla = new Map<AreaId, number>();
   let prendasMezcla = 0;
+  const prendas = new Map<string, { aceptadas: number; terminadas: number }>();
+  const prendaDe = (nombre: string) => {
+    if (!prendas.has(nombre)) prendas.set(nombre, { aceptadas: 0, terminadas: 0 });
+    return prendas.get(nombre)!;
+  };
+  const nombreDe = (producto: string) => buscarProducto(producto)?.nombre ?? producto;
+  // Lo que empezó y todavía no termina, por "área|bloque".
+  const sinTerminar = new Map<string, { p: PedidoReporte; b: PedidoReporte["bloques"][number] | null; area: AreaId }>();
+
+  /** Qué es y cuánto debía tomar un bloque (o un pedido, en Almacén) en un área. */
+  const planDe = (p: PedidoReporte, b: PedidoReporte["bloques"][number] | null, area: AreaId) => {
+    const cantidad = b ? b.cantidad : sumar(p.items, (i) => i.cantidad);
+    const item = b ? p.items.find((i) => i.id === b.item_id) : undefined;
+    const dias = b
+      ? (cantidad * minutosPorPrenda(b.familia, area)) / AREAS[area].minutosPorDia
+      : Math.max(ALMACEN.minimoDias, cantidad / ALMACEN.prendasPorDia);
+    // La compra de tela retrasa al pedido pero no ocupa a Almacén, igual que en el simulador.
+    const diasCompra = b || p.hay_tela ? 0 : ALMACEN.diasCompraSinTela;
+    return {
+      prenda: b ? (item ? nombreDe(item.producto) : FAMILIAS[b.familia].nombre) : "Tela e insumos del pedido",
+      cantidad,
+      horasPlan: redondear((dias + diasCompra) * HORAS_POR_DIA),
+      horasCompra: diasCompra * HORAS_POR_DIA,
+    };
+  };
 
   /** Lleva el reloj del área hasta `instante`: reparte ese rato entre lo que tenía en proceso. */
   const avanzar = (area: AreaId, instante: string) => {
@@ -315,7 +363,9 @@ export function calcularReporte(
       detenido.set(clave, 0);
       trabajado.set(clave, 0);
       enProceso.get(area)!.add(clave);
+      sinTerminar.set(clave, { p, b, area });
     } else if (e.tipo === "terminar") {
+      sinTerminar.delete(clave);
       enProceso.get(area)!.delete(clave);
       parados.get(area)!.delete(clave);
       pausados.delete(clave);
@@ -323,6 +373,8 @@ export function calcularReporte(
         salidas.set(p.id, e.creado_en);
         finDeBloque.set(b.id, diaDe(e.creado_en));
         if (enPeriodo(e.creado_en)) {
+          const suItem = p.items.find((i) => i.id === b.item_id);
+          prendaDe(suItem ? nombreDe(suItem.producto) : FAMILIAS[b.familia].nombre).terminadas += cantidad;
           prendasMezcla += cantidad;
           cargaMezcla.set("almacen", (cargaMezcla.get("almacen") ?? 0) + cantidad / ALMACEN.prendasPorDia);
           for (const a of b.ruta) {
@@ -340,20 +392,11 @@ export function calcularReporte(
       const inicio = inicios.get(clave);
       inicios.delete(clave);
       if (!enPeriodo(e.creado_en)) continue;
-      const item = b ? p.items.find((i) => i.id === b.item_id) : undefined;
-      const dias = b
-        ? (cantidad * minutosPorPrenda(b.familia, area)) / AREAS[area].minutosPorDia
-        : Math.max(ALMACEN.minimoDias, cantidad / ALMACEN.prendasPorDia);
-      // La compra de tela retrasa al pedido pero no ocupa a Almacén, igual que en el simulador.
-      const diasCompra = b || p.hay_tela ? 0 : ALMACEN.diasCompraSinTela;
       const llegada = llegadas.get(clave) ?? (b ? null : p.creado_en);
       const medido = inicio !== undefined;
       tramos.push({
         ...base,
-        prenda: b
-          ? ((item && buscarProducto(item.producto)?.nombre) ?? FAMILIAS[b.familia].nombre)
-          : "Tela e insumos del pedido",
-        cantidad,
+        ...planDe(p, b, area),
         llegada,
         inicio: inicio ?? null,
         fin: e.creado_en,
@@ -361,8 +404,7 @@ export function calcularReporte(
         horasReales: medido ? redondear((trabajado.get(clave) ?? 0) + (detenido.get(clave) ?? 0)) : null,
         horasReloj: medido ? redondear(horasEntre(inicio, e.creado_en)) : null,
         horasDetenido: medido ? redondear(detenido.get(clave) ?? 0) : 0,
-        horasPlan: redondear((dias + diasCompra) * HORAS_POR_DIA),
-        horasCompra: diasCompra * HORAS_POR_DIA,
+        enCurso: false,
       });
     } else if (e.tipo === "problema") {
       const texto = e.detalle?.trim() || "Sin detalle";
@@ -394,6 +436,31 @@ export function calcularReporte(
   for (const problema of abiertos.values()) problema.horasDetenido = redondear(horasEntre(problema.reportado, hasta));
   for (const area of ORDEN_AREAS) avanzar(area, hasta);
 
+  // Lo que sigue en proceso: si no se contara, un bloque atascado no aparecería hasta terminar.
+  const enCurso: Tramo[] = [];
+  for (const [clave, { p, b, area }] of sinTerminar) {
+    if (p.terminado || b?.terminado) continue;
+    const inicio = inicios.get(clave)!;
+    const abierto = abiertos.get(clave);
+    const parado = (detenido.get(clave) ?? 0) + (abierto ? horasEntre(abierto.reportado, hasta) : 0);
+    const llegada = llegadas.get(clave) ?? (b ? null : p.creado_en);
+    enCurso.push({
+      pedido: p.codigo,
+      cliente: p.cliente,
+      bloque: b ? b.numero : null,
+      area,
+      ...planDe(p, b, area),
+      llegada,
+      inicio,
+      fin: hasta,
+      horasEspera: llegada ? redondear(horasEntre(llegada, inicio)) : null,
+      horasReales: redondear((trabajado.get(clave) ?? 0) + parado),
+      horasReloj: redondear(horasEntre(inicio, hasta)),
+      horasDetenido: redondear(parado),
+      enCurso: true,
+    });
+  }
+
   // Cumplimiento: cuándo quedó listo cada pedido frente a lo que se le prometió al cliente al confirmar.
   for (const p of pedidos) {
     const salida = salidas.get(p.id);
@@ -405,6 +472,7 @@ export function calcularReporte(
       cliente: p.cliente,
       prometido,
       reprogramado: reprogramados.has(p.id),
+      detalle: p.items.map((i) => `${i.cantidad} ${nombreDe(i.producto)}`).join(" · "),
       listo,
       entregado: recojos.get(p.id) ?? null,
       aTiempo: prometido ? listo <= prometido : null,
@@ -428,7 +496,12 @@ export function calcularReporte(
   const areas: ResumenArea[] = ORDEN_AREAS.map((area) => {
     const suyos = tramos.filter((t) => t.area === area);
     const susProblemas = problemas.filter((x) => x.area === area);
-    const medidos = suyos.filter((t) => t.horasReales !== null);
+    const medidos = [
+      ...suyos.filter((t) => t.horasReales !== null),
+      ...enCurso.filter((t) => t.area === area && t.horasReales! > t.horasPlan),
+    ];
+    const reales = sumar(medidos, (t) => t.horasReales!);
+    const planificadas = sumar(medidos, (t) => t.horasPlan);
     const conEspera = suyos.filter((t) => t.horasEspera !== null);
     // La capacidad y su uso salen de todo lo producido; los tiempos, solo de lo medido.
     const horasPlan = sumar(suyos, (t) => t.horasPlan - t.horasCompra);
@@ -448,8 +521,9 @@ export function calcularReporte(
       tramos: suyos.length,
       prendas,
       medidos: medidos.length,
-      horasReales: redondear(sumar(medidos, (t) => t.horasReales!)),
-      horasPlan: redondear(sumar(medidos, (t) => t.horasPlan)),
+      desviacion: planificadas > 0 ? reales / planificadas - 1 : null,
+      horasReales: redondear(reales),
+      horasPlan: redondear(planificadas),
       horasDeRetraso: redondear(sumar(medidos, (t) => Math.max(0, t.horasReales! - t.horasPlan))),
       retrasados: medidos.filter((t) => t.horasReales! > t.horasPlan * TOLERANCIA).length,
       esperaMedia: conEspera.length ? redondear(sumar(conEspera, (t) => t.horasEspera!) / conEspera.length) : 0,
@@ -467,16 +541,21 @@ export function calcularReporte(
   const porMes = unidad === "mes";
   const grupoDe = (fecha: string) => (porMes ? fecha.slice(0, 7) : lunesDe(fecha));
   const grupos = [...new Set(cubetas.map((c) => grupoDe(c.hasta)))];
-  const cumplimiento: Reporte["cumplimiento"] = {
+  const porSemana: Reporte["porSemana"] = {
     unidad: porMes ? "mes" : "semana",
     etiquetas: grupos.map((g) => (porMes ? `${MESES[Number(g.slice(5)) - 1]} ${g.slice(2, 4)}` : `sem. ${diaMes(g)}`)),
+    diasHabiles: grupos.map((g) => sumar(cubetas.filter((c) => grupoDe(c.hasta) === g), (c) => c.diasHabiles)),
+    aceptadas: grupos.map(() => 0),
+    terminadas: grupos.map(() => 0),
     aTiempo: grupos.map(() => 0),
     tarde: grupos.map(() => 0),
   };
-  for (const x of entregas) {
-    const i = grupos.indexOf(grupoDe(x.listo));
-    if (i >= 0 && x.aTiempo !== null) cumplimiento[x.aTiempo ? "aTiempo" : "tarde"][i]++;
-  }
+  const sumarA = (serie: number[], dia: string, n: number) => {
+    const i = grupos.indexOf(grupoDe(dia));
+    if (i >= 0) serie[i] += n;
+  };
+  for (const x of entregas) if (x.aTiempo !== null) sumarA(x.aTiempo ? porSemana.aTiempo : porSemana.tarde, x.listo, 1);
+  for (const t of tramos) if (t.area === "acabados") sumarA(porSemana.terminadas, diaDe(t.fin), t.cantidad);
 
   // Lo aceptado frente a lo que la planta puede hacer.
   const aceptadas = cubetas.map(() => 0);
@@ -485,12 +564,14 @@ export function calcularReporte(
   let pedidosAceptados = 0;
   for (const p of pedidos) {
     if (!enPeriodo(p.creado_en)) continue;
-    const prendas = sumar(p.items, (x) => x.cantidad);
+    const suyas = sumar(p.items, (x) => x.cantidad);
     const i = indice(p.creado_en);
-    if (i !== undefined) aceptadas[i] += prendas;
-    prendasAceptadas += prendas;
+    if (i !== undefined) aceptadas[i] += suyas;
+    sumarA(porSemana.aceptadas, diaDe(p.creado_en), suyas);
+    for (const x of p.items) prendaDe(nombreDe(x.producto)).aceptadas += x.cantidad;
+    prendasAceptadas += suyas;
     pedidosAceptados++;
-    cargaAceptada.set("almacen", (cargaAceptada.get("almacen") ?? 0) + prendas / ALMACEN.prendasPorDia);
+    cargaAceptada.set("almacen", (cargaAceptada.get("almacen") ?? 0) + suyas / ALMACEN.prendasPorDia);
     for (const b of p.bloques) {
       for (const a of b.ruta) {
         cargaAceptada.set(a, (cargaAceptada.get(a) ?? 0) + (b.cantidad * minutosPorPrenda(b.familia, a)) / AREAS[a].minutosPorDia);
@@ -518,8 +599,9 @@ export function calcularReporte(
   const pendiente = cubetas.map((c) => pendienteAl(c.hasta, true));
   const pendienteInicial = pendienteAl(diaDe(desde), false);
 
-  const peor = [...areas].sort((a, b) => b.horasDeRetraso - a.horasDeRetraso || b.problemas - a.problemas)[0];
-  const critica = peor.horasDeRetraso > 0 || peor.problemas > 0 ? peor : null;
+  // En proporción y no en horas: si no, siempre saldría el área que más horas mueve.
+  const peor = [...areas].sort((a, b) => (b.desviacion ?? -1) - (a.desviacion ?? -1) || b.problemas - a.problemas)[0];
+  const critica = (peor.desviacion ?? 0) > 0 ? peor : null;
 
   return {
     desde,
@@ -538,7 +620,11 @@ export function calcularReporte(
     pendiente,
     pendienteInicial,
     demanda,
-    cumplimiento,
+    porSemana,
+    porPrenda: [...prendas]
+      .map(([prenda, v]) => ({ prenda, ...v }))
+      .sort((a, b) => b.aceptadas + b.terminadas - (a.aceptadas + a.terminadas)),
+    enCurso,
     meses,
     problemasPorMes,
     motivos,

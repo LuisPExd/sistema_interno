@@ -10,6 +10,8 @@ type Props = {
   etiquetas: string[];
   /** Una serie, o varias apiladas en la misma columna. */
   series: SerieColumnas[];
+  /** Las series van una al lado de la otra en vez de apiladas: para comparar dos cantidades. */
+  agrupadas?: boolean;
   /** Línea horizontal de referencia (capacidad, meta). */
   referencia?: { valor: number; texto: string };
   /** Texto extra por columna para el recuadro que aparece al tocar. */
@@ -42,15 +44,19 @@ function escala(maximo: number, enteros: boolean): { tope: number; marcas: numbe
 const numero = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1).replace(".", ","));
 
 /** Columnas por periodo. Al pasar el dedo o el cursor muestra los valores de esa columna. */
-export function GraficaColumnas({ descripcion, etiquetas, series, referencia, notas, unidad, compacta, enteros }: Props) {
+export function GraficaColumnas({ descripcion, etiquetas, series, agrupadas, referencia, notas, unidad, compacta, enteros }: Props) {
   const ANCHO = compacta ? 480 : 760;
   const [activo, setActivo] = useState<number | null>(null);
   const n = etiquetas.length;
-  const totales = etiquetas.map((_, i) => series.reduce((s, x) => s + x.valores[i], 0));
+  // Alto de cada columna: la suma si van apiladas, la mayor si van lado a lado.
+  const totales = etiquetas.map((_, i) =>
+    agrupadas ? Math.max(...series.map((x) => x.valores[i])) : series.reduce((s, x) => s + x.valores[i], 0),
+  );
   const { tope, marcas } = escala(Math.max(...totales, referencia?.valor ?? 0), enteros ?? false);
 
   const banda = (ANCHO - M.izquierda - M.derecha) / n;
-  const grosor = Math.max(3, Math.min(24, banda * 0.62));
+  const grosor = Math.max(3, Math.min(agrupadas ? 24 * series.length : 24, banda * 0.62));
+  const ancho = agrupadas ? grosor / series.length : grosor;
   const centro = (i: number) => M.izquierda + banda * (i + 0.5);
   const base = ALTO - M.abajo;
   const y = (v: number) => base - (v / tope) * (base - M.arriba);
@@ -99,14 +105,15 @@ export function GraficaColumnas({ descripcion, etiquetas, series, referencia, no
                   const arriba = y(acumulado + v);
                   // 2 px de separación entre los tramos apilados.
                   const alto = y(acumulado) - arriba - (acumulado > 0 ? 2 : 0);
-                  acumulado += v;
-                  const esUltimo = series.slice(k + 1).every((x) => x.valores[i] <= 0);
-                  const r = esUltimo ? Math.min(4, grosor / 2, Math.max(0, alto)) : 0;
-                  const x0 = centro(i) - grosor / 2;
+                  if (!agrupadas) acumulado += v;
+                  const esUltimo = agrupadas || series.slice(k + 1).every((x) => x.valores[i] <= 0);
+                  const r = esUltimo ? Math.min(4, ancho / 2, Math.max(0, alto)) : 0;
+                  const x0 = centro(i) - grosor / 2 + (agrupadas ? k * ancho : 0);
+                  const w = ancho - (agrupadas ? 1 : 0);
                   return (
                     <path
                       key={s.nombre}
-                      d={`M${x0},${arriba + alto} V${arriba + r} Q${x0},${arriba} ${x0 + r},${arriba} H${x0 + grosor - r} Q${x0 + grosor},${arriba} ${x0 + grosor},${arriba + r} V${arriba + alto} Z`}
+                      d={`M${x0},${arriba + alto} V${arriba + r} Q${x0},${arriba} ${x0 + r},${arriba} H${x0 + w - r} Q${x0 + w},${arriba} ${x0 + w},${arriba + r} V${arriba + alto} Z`}
                       fill={s.color}
                     />
                   );

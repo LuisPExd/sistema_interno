@@ -130,6 +130,38 @@ describe("análisis de producción", () => {
     expect(corte.capacidadDia).toBe(250);
   });
 
+  it("cuenta lo que sigue en proceso cuando ya se pasó de lo planificado", () => {
+    // Corte empezó el lunes a las 8:00 un bloque de 1,6 h y el miércoles a las 16:00 sigue sin terminar: 24 h.
+    const atascado = calcularReporte(pedidos, [e("corte", "empezar", lima(5, 8))], lima(5, 0), lima(7, 16));
+    const corte = atascado.areas.find((a) => a.area === "corte")!;
+    expect(atascado.tramos).toHaveLength(0);
+    expect(atascado.enCurso[0]).toMatchObject({ pedido: "P-0001", area: "corte", enCurso: true, horasReales: 24, horasPlan: 1.6 });
+    expect(corte).toMatchObject({ tramos: 0, prendas: 0, medidos: 1, horasDeRetraso: 22.4, retrasados: 1 });
+    expect(atascado.critica?.area).toBe("corte");
+    // Recién empezado no cuenta: todavía no dice nada.
+    const reciente = calcularReporte(pedidos, [e("corte", "empezar", lima(7, 15))], lima(5, 0), lima(7, 16));
+    expect(reciente.areas.find((a) => a.area === "corte")!.medidos).toBe(0);
+    expect(reciente.critica).toBeNull();
+  });
+
+  it("el área crítica es la que más se pasó en proporción, no en horas", () => {
+    const uno: PedidoReporte[] = [{ ...pedidos[0], bloques: [{ id: 100, item_id: 10, numero: 1, cantidad: 50, familia: "polo_camisero", ruta: ["corte", "confeccion"] }] }];
+    const r2 = calcularReporte(
+      uno,
+      [
+        // Corte: 1,6 h planificadas, tomó 4 (+150 %, 2,4 h de más).
+        e("corte", "empezar", lima(5, 8)),
+        e("corte", "terminar", lima(5, 12)),
+        // Confección: 7,1 h planificadas, tomó 12 (+69 %, 4,9 h de más).
+        e("confeccion", "empezar", lima(5, 12)),
+        e("confeccion", "terminar", lima(6, 16)),
+      ],
+      lima(5, 0),
+      lima(7, 16),
+    );
+    expect(r2.critica?.area).toBe("corte");
+  });
+
   it("sin movimientos no hay área crítica", () => {
     expect(calcularReporte(pedidos, [], lima(5, 0), lima(7, 16)).critica).toBeNull();
   });
@@ -213,11 +245,23 @@ describe("análisis de producción: reparto del tiempo y cumplimiento", () => {
   it("mide el cumplimiento por el día en que quedó listo frente a la primera fecha prometida", () => {
     expect(r.entregas).toEqual([
       // Quedó listo el 7: a tiempo para la fecha reprogramada (9), tarde para la original (6).
-      { pedido: "P-0001", cliente: "Clínica San Miguel", prometido: "2026-10-06", reprogramado: true, listo: "2026-10-07", entregado: null, aTiempo: false },
+      { pedido: "P-0001", cliente: "Clínica San Miguel", prometido: "2026-10-06", reprogramado: true, detalle: "100 Polo camisero", listo: "2026-10-07", entregado: null, aTiempo: false },
       // Listo el 9 y prometido el 10: a tiempo, lo recoja cuando lo recoja el cliente.
-      { pedido: "P-0002", cliente: "Restaurante El Muelle", prometido: "2026-10-10", reprogramado: false, listo: "2026-10-09", entregado: "2026-10-10", aTiempo: true },
+      { pedido: "P-0002", cliente: "Restaurante El Muelle", prometido: "2026-10-10", reprogramado: false, detalle: "30 Mandil", listo: "2026-10-09", entregado: "2026-10-10", aTiempo: true },
     ]);
-    expect(r.cumplimiento).toEqual({ unidad: "semana", etiquetas: ["sem. 5 oct"], aTiempo: [1], tarde: [1] });
+    expect(r.porSemana).toEqual({
+      unidad: "semana",
+      etiquetas: ["sem. 5 oct"],
+      diasHabiles: [6],
+      aceptadas: [130],
+      terminadas: [130],
+      aTiempo: [1],
+      tarde: [1],
+    });
+    expect(r.porPrenda).toEqual([
+      { prenda: "Polo camisero", aceptadas: 100, terminadas: 100 },
+      { prenda: "Mandil", aceptadas: 30, terminadas: 30 },
+    ]);
   });
 
   it("compara lo aceptado con lo que la planta puede hacer y sigue lo pendiente", () => {
