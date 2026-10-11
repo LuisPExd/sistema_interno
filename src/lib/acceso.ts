@@ -68,8 +68,9 @@ export async function exigir(zona: Zona): Promise<Rol> {
 // ---------- Intentos fallidos ----------
 // Se cuentan por rol y no por dirección, porque la dirección se puede falsear.
 
-const MAX_FALLOS = 5;
-const BLOQUEO_MS = 5 * 60 * 1000;
+// Cada 10 fallos seguidos, un minuto de espera: frena a quien prueba PIN al azar sin parar la planta.
+const MAX_FALLOS = 10;
+const BLOQUEO_MS = 60 * 1000;
 const fallos = new Map<Rol, { veces: number; hasta: number }>();
 
 /** Minutos que faltan para volver a intentar, o 0 si no está bloqueado. */
