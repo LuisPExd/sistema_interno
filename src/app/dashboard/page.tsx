@@ -2,15 +2,14 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { Cabecera, Cargando } from "@/componentes/Cabecera";
 import { FilaPedido } from "@/componentes/FilaPedido";
+import { GraficaProduccion } from "@/componentes/GraficaProduccion";
 import { Refrescar } from "@/componentes/Refrescar";
 import { exigir } from "@/lib/acceso";
-import { hoyEnPeru } from "@/lib/calendario";
 import { horasEnTexto } from "@/lib/formato";
-import { CAPACIDAD_MENSUAL, historiaMensual } from "@/lib/historiaSimulada";
 import { cargarPlanta, type CargaArea, type Tarjeta } from "@/lib/planta";
+import { cargarProduccionReciente } from "@/lib/reportes-datos";
 import { puede } from "@/lib/roles";
 import { AccionesPedido } from "./AccionesPedido";
-import { GraficaMensual } from "./GraficaMensual";
 
 type Props = { searchParams: Promise<{ ver?: string }> };
 
@@ -45,7 +44,10 @@ async function Dashboard({ searchParams }: Props) {
   const decide = puede(rol, "decidir");
   const { ver } = await searchParams;
   const filtro = ver && ver in FILTROS ? (ver as Filtro) : null;
-  const { pedidos, carga, alertas, tarjetas, urgentesActivos } = await cargarPlanta();
+  const [{ pedidos, carga, alertas, tarjetas, urgentesActivos }, produccion] = await Promise.all([
+    cargarPlanta(),
+    cargarProduccionReciente(),
+  ]);
   const activos = pedidos.filter((p) => p.estado !== "listo");
   const orden = { rojo: 0, amarillo: 1, verde: 2 };
   activos.sort(
@@ -78,7 +80,22 @@ async function Dashboard({ searchParams }: Props) {
         <Cifra valor={listos} texto="listos para entregar" filtro="listos" activo={filtro} />
       </section>
 
-      <GraficaMensual meses={historiaMensual(hoyEnPeru())} capacidad={CAPACIDAD_MENSUAL} />
+      <figure className="rounded-2xl bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-baseline gap-x-4">
+          <figcaption className="text-xl font-extrabold">¿Cuánto está produciendo la planta?</figcaption>
+          {puede(rol, "reportes") && (
+            <Link href="/reportes" className="ml-auto text-base font-bold text-marca underline">
+              Ver el análisis completo
+            </Link>
+          )}
+        </div>
+        <p className="mt-0.5 text-base text-gray-600">
+          Prendas terminadas por día en las últimas dos semanas. La línea es lo que Acabados puede sacar por día.
+        </p>
+        <div className="mt-4 max-w-5xl">
+          <GraficaProduccion reporte={produccion} area="acabados" />
+        </div>
+      </figure>
 
       <section className="space-y-3">
         <h2 className={titulo}>Qué pasa en cada área</h2>
