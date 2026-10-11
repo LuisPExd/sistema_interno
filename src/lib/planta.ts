@@ -18,6 +18,7 @@ import {
 import { usarConfiguracion } from "./configuracion";
 import { BUCKET_DISENOS, db } from "./db";
 import { fechaCorta } from "./formato";
+import { modelosDe } from "./modelos";
 import { estadoDeCola, type Trabajo } from "./simulador";
 
 export type ItemFila = {
@@ -128,6 +129,8 @@ export type Lectura = {
   eventos: EventoFila[];
   /** Enlace temporal al diseño del cliente, por código de pedido. */
   disenos: Record<string, string>;
+  /** Enlaces temporales a las imágenes del modelo (vistas de la web), por código de pedido. */
+  modelos: Record<string, string[]>;
 };
 
 /**
@@ -151,7 +154,20 @@ export async function leerTodo(): Promise<Lectura> {
   ]);
   if (eventosRes.error) throw new Error(eventosRes.error.message);
 
-  return { pedidos, eventos: eventosRes.data as EventoFila[], disenos: await firmarDisenos(pedidos) };
+  const [disenos, modelos] = await Promise.all([firmarDisenos(pedidos), firmarModelos(pedidos)]);
+  return { pedidos, eventos: eventosRes.data as EventoFila[], disenos, modelos };
+}
+
+async function firmarModelos(pedidos: PedidoFila[]): Promise<Record<string, string[]>> {
+  const activos = pedidos.filter((p) => p.cotizacion_codigo && EN_PLANTA.includes(p.estado));
+  if (activos.length === 0) return {};
+  const porCotizacion = await modelosDe(activos.map((p) => p.cotizacion_codigo!));
+  const modelos: Record<string, string[]> = {};
+  for (const p of activos) {
+    const urls = porCotizacion[p.cotizacion_codigo!];
+    if (urls) modelos[p.codigo] = urls;
+  }
+  return modelos;
 }
 
 async function firmarDisenos(pedidos: PedidoFila[]): Promise<Record<string, string>> {
@@ -302,6 +318,8 @@ export type Tarjeta = {
   problema: string | null;
   fechaPrometida: string | null;
   disenoUrl: string | null;
+  /** Imágenes del modelo que eligió el cliente; vacío si el pedido no vino con imágenes. */
+  modelos: string[];
   aviso: string | null;
 };
 
@@ -320,6 +338,7 @@ function tarjetasDe(area: AreaId, pedidos: PedidoFila[], problemas: Map<string, 
       urgente: p.urgente,
       fechaPrometida: p.fecha_prometida,
       disenoUrl: null,
+      modelos: [] as string[],
     };
     if (area === "almacen") {
       if (p.almacen_estado === "terminado") continue;
@@ -458,7 +477,10 @@ export async function cargarPlanta(): Promise<Planta> {
   }
 
   for (const lista of Object.values(tarjetas)) {
-    for (const t of lista) t.disenoUrl = lectura.disenos[t.pedido] ?? null;
+    for (const t of lista) {
+      t.disenoUrl = lectura.disenos[t.pedido] ?? null;
+      t.modelos = lectura.modelos[t.pedido] ?? [];
+    }
   }
 
   const carga: CargaArea[] = ORDEN_AREAS.map((area) => {

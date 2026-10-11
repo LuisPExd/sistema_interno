@@ -50,7 +50,7 @@ export function FormularioPedido({ productos }: { productos: ProductoOpcion[] })
   });
 
   const [codigo, setCodigo] = useState("");
-  const [cotizacion, setCotizacion] = useState<{ codigo: string; precio: number | null; disenoUrl: string | null } | null>(null);
+  const [cotizacion, setCotizacion] = useState<{ codigo: string; precio: number | null; disenoUrl: string | null; modelos: string[] } | null>(null);
   const [cliente, setCliente] = useState({ nombre: "", empresa: "", telefono: "" });
   const [lineas, setLineas] = useState<Linea[]>([nuevaLinea(1)]);
   const [urgente, setUrgente] = useState(false);
@@ -102,7 +102,7 @@ export function FormularioPedido({ productos }: { productos: ProductoOpcion[] })
       const r = await buscarCotizacion(codigo);
       if (!r.ok) return setError(r.error);
       const c = r.cotizacion;
-      setCotizacion({ codigo: c.codigo, precio: c.precioTotal, disenoUrl: c.disenoUrl });
+      setCotizacion({ codigo: c.codigo, precio: c.precioTotal, disenoUrl: c.disenoUrl, modelos: c.modelos });
       setCliente({ nombre: c.cliente.nombre, empresa: c.cliente.empresa ?? "", telefono: c.cliente.telefono });
       setLineas(
         c.items.map((i, n) => ({
@@ -205,6 +205,20 @@ export function FormularioPedido({ productos }: { productos: ProductoOpcion[] })
               "El cliente no subió diseño."
             )}
           </p>
+        )}
+        {cotizacion && cotizacion.modelos.length > 0 && (
+          <div className="mt-3">
+            <p className="text-base font-semibold text-gray-700">Modelo que eligió el cliente</p>
+            <div className="mt-2 flex flex-wrap gap-3">
+              {cotizacion.modelos.map((url, i) => (
+                <a key={i} href={url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border-2 border-gray-200 bg-white">
+                  {/* Enlace temporal a un archivo privado: no pasa por el optimizador de imágenes. */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={url} alt={`Modelo del pedido, vista ${i + 1}`} className="h-44 w-36 object-contain sm:h-56 sm:w-44" />
+                </a>
+              ))}
+            </div>
+          </div>
         )}
       </section>
 

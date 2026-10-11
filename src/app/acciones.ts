@@ -13,6 +13,7 @@ import {
   type AreaId,
 } from "@/lib/catalogo";
 import { BUCKET_DISENOS, db } from "@/lib/db";
+import { modelosDe } from "@/lib/modelos";
 import { ETIQUETA_PLANTA, aTrabajos, cargarPedidos } from "@/lib/planta";
 import { estadoDeCola, estimar, trabajoDesdeItems, type Estimacion } from "@/lib/simulador";
 import { ErrorDeDatos, validarItems, type ItemCotizado } from "@/lib/validar";
@@ -265,6 +266,8 @@ export type CotizacionCargada = {
   precioTotal: number | null;
   fechaEstimada: string | null;
   disenoUrl: string | null;
+  /** Imágenes del modelo que eligió el cliente (vistas de la web o imagen que subió). */
+  modelos: string[];
 };
 
 export async function buscarCotizacion(codigoCrudo: string): Promise<Respuesta<{ cotizacion: CotizacionCargada }>> {
@@ -295,6 +298,7 @@ export async function buscarCotizacion(codigoCrudo: string): Promise<Respuesta<{
         precioTotal: data.precio_total,
         fechaEstimada: data.fecha_estimada,
         disenoUrl,
+        modelos: (await modelosDe([codigo]))[codigo] ?? [],
       },
     };
   } catch (e) {

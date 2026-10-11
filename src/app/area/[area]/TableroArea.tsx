@@ -48,6 +48,8 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
   const [porConfirmar, setPorConfirmar] = useState<{ t: Tarjeta; que: keyof typeof CONFIRMAR } | null>(null);
   const [motivo, setMotivo] = useState<string | null>(null);
   const [descripcion, setDescripcion] = useState("");
+  // Imágenes del modelo que se están mirando en grande.
+  const [modelo, setModelo] = useState<Tarjeta | null>(null);
   const cerrarProblema = () => {
     setConProblema(null);
     setMotivo(null);
@@ -133,7 +135,7 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
               t.estado === "detenido" ? "border-red-600" : "border-green-600"
             }`}
           >
-            <Contenido t={t} grande />
+            <Contenido t={t} grande verModelo={setModelo} />
             {t.estado === "detenido" ? (
               <div className="mt-4 rounded-xl bg-red-50 p-4">
                 <p className="text-xl font-bold text-red-700 sm:text-2xl">Detenido: {t.problema ?? "problema"}</p>
@@ -165,7 +167,7 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
         <h2 className="text-xl font-bold text-gray-600 uppercase tracking-wide">Siguiente</h2>
         {siguiente ? (
           <article className="rounded-2xl bg-white p-4 shadow border-l-8 border-acento sm:p-5 sm:border-l-[12px]">
-            <Contenido t={siguiente} grande />
+            <Contenido t={siguiente} grande verModelo={setModelo} />
             {llena ? (
               <p className="mt-4 rounded-2xl bg-amber-100 p-4 text-center text-lg font-bold text-amber-900 sm:text-xl">
                 El área está a su capacidad. Termina un bloque para empezar este.
@@ -190,7 +192,7 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
             </h2>
             {enCola.map((t) => (
               <article key={`${t.tipo}-${t.id}`} className="rounded-2xl bg-white p-4 shadow-sm">
-                <Contenido t={t} />
+                <Contenido t={t} verModelo={setModelo} />
               </article>
             ))}
           </>
@@ -217,6 +219,29 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
               <button onClick={confirmar} className={`${boton} ${CONFIRMAR[porConfirmar.que].color}`}>
                 {CONFIRMAR[porConfirmar.que].si}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modelo && (
+        <div className="fixed inset-0 z-10 bg-black/70 p-3 flex items-center justify-center sm:p-6" onClick={() => setModelo(null)}>
+          <div className="flex max-h-full w-full max-w-5xl flex-col rounded-3xl bg-white p-4 sm:p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-2xl font-extrabold sm:text-3xl">Modelo · {modelo.pedido}</h2>
+                <p className="text-lg text-gray-600 sm:text-xl">{modelo.titulo}</p>
+              </div>
+              <button onClick={() => setModelo(null)} className="rounded-2xl bg-gray-200 px-5 py-3 text-xl font-bold active:scale-95">
+                Cerrar
+              </button>
+            </div>
+            <div className="mt-4 flex flex-1 gap-3 overflow-auto">
+              {modelo.modelos.map((url, i) => (
+                // Enlace temporal a un archivo privado: no pasa por el optimizador de imágenes.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img key={i} src={url} alt={`Modelo, vista ${i + 1}`} className="max-h-[65vh] min-w-0 flex-1 rounded-xl border-2 border-gray-200 object-contain" />
+              ))}
             </div>
           </div>
         </div>
@@ -288,7 +313,7 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
   );
 }
 
-function Contenido({ t, grande = false }: { t: Tarjeta; grande?: boolean }) {
+function Contenido({ t, grande = false, verModelo }: { t: Tarjeta; grande?: boolean; verModelo: (t: Tarjeta) => void }) {
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
@@ -316,15 +341,28 @@ function Contenido({ t, grande = false }: { t: Tarjeta; grande?: boolean }) {
         </p>
       )}
       {t.aviso && <p className="mt-2 inline-block rounded-lg bg-amber-100 px-3 py-1 text-lg font-bold text-amber-900">{t.aviso}</p>}
-      {grande && t.disenoUrl && (
-        <a
-          href={t.disenoUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-3 inline-block rounded-xl bg-marca-suave px-4 py-2 text-lg font-bold text-marca"
-        >
-          Ver diseño
-        </a>
+      {(t.modelos.length > 0 || (grande && t.disenoUrl)) && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {t.modelos.length > 0 && (
+            <button
+              type="button"
+              onClick={() => verModelo(t)}
+              className={`rounded-xl bg-marca-suave font-bold text-marca active:scale-95 ${grande ? "px-5 py-3 text-xl" : "px-4 py-2 text-base"}`}
+            >
+              Ver modelo
+            </button>
+          )}
+          {grande && t.disenoUrl && (
+            <a
+              href={t.disenoUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-xl bg-marca-suave px-4 py-3 text-lg font-bold text-marca"
+            >
+              Ver ficha del diseño
+            </a>
+          )}
+        </div>
       )}
     </>
   );

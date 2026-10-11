@@ -12,7 +12,13 @@ const EXTENSIONES: Record<string, string> = {
   "application/pdf": "pdf",
 };
 
-/** La web sube aquí el diseño del cliente; queda vinculado al código de cotización. */
+// Vistas del modelo que genera la web: se guardan aparte de la ficha y se muestran a ventas y a cada área.
+const VISTAS = ["frente", "media-lateral", "lateral", "espalda"];
+
+/**
+ * La web sube aquí el diseño del cliente; queda vinculado al código de cotización.
+ * Con el campo "vista" (frente, media-lateral, lateral o espalda) sube una imagen del modelo en vez de la ficha.
+ */
 export async function POST(request: Request, { params }: { params: Promise<{ codigo: string }> }) {
   try {
     const codigo = (await params).codigo.toUpperCase();
@@ -32,11 +38,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     if (errorBusqueda) throw new Error(errorBusqueda.message);
     if (!cotizacion) return json({ error: `No existe la cotización ${codigo}.` }, 404);
 
-    const ruta = `${codigo}/diseno.${extension}`;
+    const vista = formulario?.get("vista");
+    if (vista !== null && vista !== undefined) {
+      if (typeof vista !== "string" || !VISTAS.includes(vista)) throw new ErrorDeDatos(`La vista debe ser una de: ${VISTAS.join(", ")}.`);
+      if (extension === "pdf") throw new ErrorDeDatos("La vista del modelo debe ser una imagen.");
+    }
+    const ruta = vista ? `${codigo}/vista-${vista}.${extension}` : `${codigo}/diseno.${extension}`;
     const { error: errorSubida } = await db()
       .storage.from(BUCKET_DISENOS)
       .upload(ruta, archivo, { contentType: archivo.type, upsert: true });
     if (errorSubida) throw new Error(errorSubida.message);
+
+    if (vista) return json({ codigo, vista, diseno: "guardado" }, 201);
 
     const { error } = await db().from("cotizaciones").update({ diseno_archivo: ruta }).eq("codigo", codigo);
     if (error) throw new Error(error.message);
