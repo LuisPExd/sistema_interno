@@ -88,6 +88,14 @@ create table if not exists accesos (
   actualizado_en timestamptz not null default now()
 );
 
+-- Ajustes del jefe de producción (capacidades, minutos por prenda, tamaños de bloque).
+-- Una sola fila, clave "planta". Sin fila se usan los valores de src/lib/catalogo.ts.
+create table if not exists configuracion (
+  clave text primary key,
+  valor jsonb not null,
+  actualizado_en timestamptz not null default now()
+);
+
 -- Diseños que sube el cliente en la web; se leen con enlaces temporales.
 insert into storage.buckets (id, name, public)
 values ('disenos', 'disenos', false)
@@ -100,3 +108,4 @@ alter table pedido_items enable row level security;
 alter table bloques enable row level security;
 alter table eventos enable row level security;
 alter table accesos enable row level security;
+alter table configuracion enable row level security;

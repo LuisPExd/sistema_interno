@@ -15,6 +15,7 @@ import {
   type FamiliaId,
   type Personalizacion,
 } from "./catalogo";
+import { usarConfiguracion } from "./configuracion";
 import { BUCKET_DISENOS, db } from "./db";
 import { fechaCorta } from "./formato";
 import { estadoDeCola, type Trabajo } from "./simulador";
@@ -78,6 +79,7 @@ const CAMPOS_PEDIDO =
 const EN_PLANTA: PedidoFila["estado"][] = ["confirmado", "en_produccion"];
 
 export async function cargarPedidos(estados: PedidoFila["estado"][]): Promise<PedidoFila[]> {
+  await usarConfiguracion();
   const { data, error } = await db()
     .from("pedidos")
     .select(CAMPOS_PEDIDO)
@@ -417,6 +419,7 @@ export type Planta = {
 export async function cargarPlanta(): Promise<Planta> {
   // Todo lo de aquí depende del momento de la consulta.
   await connection();
+  await usarConfiguracion();
   const ahora = new Date();
   const hoy = hoyEnPeru();
 

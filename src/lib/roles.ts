@@ -25,7 +25,7 @@ export function nombreRol(rol: Rol): string {
 }
 
 /** Zonas del sistema. Un área de planta se nombra con su propio id. */
-export type Zona = AreaId | "ventas" | "dashboard" | "decidir" | "pedido" | "accesos";
+export type Zona = AreaId | "ventas" | "dashboard" | "decidir" | "pedido" | "configuracion" | "accesos";
 
 export function puede(rol: Rol, zona: Zona): boolean {
   if (rol === "admin") return true;

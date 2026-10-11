@@ -1,4 +1,6 @@
 // Reglas de planta de HANDOFF.md (secciones 3, 4 y 6). Si cambia una regla, cambia aquí.
+// Capacidades, minutos por prenda y tamaños de bloque son los valores de fábrica: el jefe de
+// producción los ajusta en /configuracion y el servidor los aplica con aplicarValores().
 
 export type Personalizacion = "ninguna" | "bordado" | "dtf" | "sublimado" | "bordado_dtf";
 
@@ -75,6 +77,45 @@ export const FAMILIAS = {
 } satisfies Record<string, Familia>;
 
 export type FamiliaId = keyof typeof FAMILIAS;
+
+export type AreaConMinutos = Exclude<AreaId, "almacen">;
+
+/** Lo que se puede ajustar sin tocar el código. */
+export type ValoresPlanta = {
+  minutosPorDia: Record<AreaConMinutos, number>;
+  almacenPrendasPorDia: number;
+  personalizacion: { bordado: number; sublimado: number; dtf: number };
+  familias: Record<FamiliaId, { corte: number; confeccion: number; acabados: number; bloque: number }>;
+};
+
+export const AREAS_CON_MINUTOS = (Object.keys(AREAS) as AreaId[]).filter((a): a is AreaConMinutos => a !== "almacen");
+export const IDS_FAMILIA = Object.keys(FAMILIAS) as FamiliaId[];
+
+export function valoresDePlanta(): ValoresPlanta {
+  const minutosPorDia = {} as ValoresPlanta["minutosPorDia"];
+  for (const a of AREAS_CON_MINUTOS) minutosPorDia[a] = AREAS[a].minutosPorDia;
+  const familias = {} as ValoresPlanta["familias"];
+  for (const id of IDS_FAMILIA) {
+    const { corte, confeccion, acabados, bloque } = FAMILIAS[id];
+    familias[id] = { corte, confeccion, acabados, bloque };
+  }
+  return {
+    minutosPorDia,
+    almacenPrendasPorDia: ALMACEN.prendasPorDia,
+    personalizacion: { ...MINUTOS_PERSONALIZACION },
+    familias,
+  };
+}
+
+export const VALORES_DE_FABRICA: ValoresPlanta = valoresDePlanta();
+
+/** Reemplaza los valores en uso. Simulador, tabletas y dashboard leen de aquí. */
+export function aplicarValores(v: ValoresPlanta) {
+  for (const a of AREAS_CON_MINUTOS) AREAS[a].minutosPorDia = v.minutosPorDia[a];
+  ALMACEN.prendasPorDia = v.almacenPrendasPorDia;
+  Object.assign(MINUTOS_PERSONALIZACION, v.personalizacion);
+  for (const id of IDS_FAMILIA) Object.assign(FAMILIAS[id], v.familias[id]);
+}
 
 export type Producto = {
   id: string;

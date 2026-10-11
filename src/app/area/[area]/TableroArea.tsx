@@ -23,6 +23,7 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
   const [, iniciar] = useTransition();
   const [conProblema, setConProblema] = useState<Tarjeta | null>(null);
   // El problema se elige y luego se confirma, para no detener un bloque por un toque equivocado.
+  const [porResolver, setPorResolver] = useState<Tarjeta | null>(null);
   const [motivo, setMotivo] = useState<string | null>(null);
   const [descripcion, setDescripcion] = useState("");
   const cerrarProblema = () => {
@@ -107,7 +108,7 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
               <div className="mt-4 rounded-xl bg-red-50 p-4">
                 <p className="text-2xl font-bold text-red-700">Detenido: {t.problema ?? "problema"}</p>
                 <button
-                  onClick={() => hacer({ t, estado: "en_proceso" }, () => resolverProblema(area, objetivo(t)))}
+                  onClick={() => setPorResolver(t)}
                   className={`${boton} mt-3 w-full bg-marca`}
                 >
                   YA SE RESOLVIÓ
@@ -165,6 +166,36 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
           </>
         )}
       </section>
+
+      {porResolver && (
+        <div className="fixed inset-0 z-10 bg-black/60 p-6 flex items-center justify-center">
+          <div className="w-full max-w-2xl rounded-3xl bg-white p-6">
+            <h2 className="text-3xl font-extrabold">¿Estás seguro de que ya se resolvió?</h2>
+            <p className="mt-1 text-xl text-gray-600">
+              {porResolver.pedido} · {porResolver.titulo}
+            </p>
+            <p className="mt-4 rounded-2xl bg-red-50 p-5 text-2xl font-bold text-red-700">
+              {porResolver.problema ?? "Problema"}
+            </p>
+            <p className="mt-3 text-xl text-gray-600">Si confirmas, el bloque vuelve a estar en proceso.</p>
+            <div className="mt-5 grid grid-cols-[1fr_2fr] gap-3">
+              <button onClick={() => setPorResolver(null)} className="rounded-2xl bg-gray-200 py-5 text-2xl font-bold">
+                Todavía no
+              </button>
+              <button
+                onClick={() => {
+                  const t = porResolver;
+                  setPorResolver(null);
+                  hacer({ t, estado: "en_proceso" }, () => resolverProblema(area, objetivo(t)));
+                }}
+                className={`${boton} bg-marca`}
+              >
+                SÍ, YA SE RESOLVIÓ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {conProblema && (
         <div className="fixed inset-0 z-10 bg-black/60 p-6 flex items-center justify-center">
