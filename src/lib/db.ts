@@ -12,8 +12,12 @@ export function db(): SupabaseClient {
   if (!dbConfigurada()) {
     throw new Error("Falta SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY en .env.local");
   }
-  cliente ??= createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+  // Supabase muestra la URL con /rest/v1/ al final; el cliente solo quiere el origen.
+  const url = new URL(process.env.SUPABASE_URL!).origin;
+  cliente ??= createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
     auth: { persistSession: false },
   });
   return cliente;
 }
+
+export const BUCKET_DISENOS = "disenos";

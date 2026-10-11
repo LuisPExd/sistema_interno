@@ -6,13 +6,13 @@ create table if not exists cotizaciones (
   codigo text primary key,
   cliente jsonb not null,
   items jsonb not null,
-  diseno_url text,
+  -- Ruta del diseño dentro del bucket privado "disenos".
+  diseno_archivo text,
   precio_total numeric,
   fecha_estimada date,
   creado_en timestamptz not null default now()
 );
 
-create sequence if not exists cotizaciones_seq start 1000;
 create sequence if not exists pedidos_seq start 1;
 
 create table if not exists pedidos (
@@ -80,7 +80,12 @@ create table if not exists eventos (
 
 create index if not exists eventos_area on eventos (area, creado_en desc);
 
--- Solo el servidor (clave service_role) toca las tablas.
+-- Diseños que sube el cliente en la web; se leen con enlaces temporales.
+insert into storage.buckets (id, name, public)
+values ('disenos', 'disenos', false)
+on conflict (id) do nothing;
+
+-- Solo el servidor (clave service_role) toca las tablas y los archivos.
 alter table cotizaciones enable row level security;
 alter table pedidos enable row level security;
 alter table pedido_items enable row level security;
