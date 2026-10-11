@@ -20,6 +20,8 @@ export type PedidoReporte = {
     cantidad: number;
     familia: keyof typeof FAMILIAS;
     ruta: AreaId[];
+    /** Ya recorrió toda su ruta. */
+    terminado?: boolean;
   }[];
 };
 
@@ -118,7 +120,7 @@ export type ResumenArea = {
 };
 
 /** Un tramo del eje de tiempo: un día, una semana o un mes según lo largo del periodo. */
-export type Cubeta = { clave: string; etiqueta: string; diasHabiles: number };
+export type Cubeta = { clave: string; etiqueta: string; diasHabiles: number; /** Último día que abarca. */ hasta: string };
 
 export type Reporte = {
   desde: string;
@@ -134,8 +136,21 @@ export type Reporte = {
   produccion: Record<AreaId, number[]>;
   /** Lo que la planta puede terminar por día con la mezcla de prendas del periodo, y el área que lo limita. */
   capacidadPlanta: { prendasDia: number; limita: AreaId } | null;
-  /** Por la fecha en que quedaron listos. */
-  entregasPorCubeta: { aTiempo: number; tarde: number }[];
+  /** Días de trabajo que tuvo el periodo; de hoy cuenta solo lo transcurrido. */
+  diasTrabajados: number;
+  /** Prendas de los pedidos que se aceptaron en cada cubeta. */
+  aceptadas: number[];
+  /** Prendas aceptadas que todavía no habían salido de la planta al cierre de cada cubeta. */
+  pendiente: number[];
+  /** Lo mismo, justo antes de empezar el periodo. */
+  pendienteInicial: number;
+  /**
+   * Lo que se aceptó en el periodo: prendas y días de trabajo que le pide al área que más carga
+   * recibe. Si esos días superan los trabajados, se aceptó más de lo que la planta puede producir.
+   */
+  demanda: { prendas: number; pedidos: number; diasNecesarios: number; limita: AreaId } | null;
+  /** Pedidos que quedaron listos, por semana (o por mes en periodos largos): por día son muy pocos. */
+  cumplimiento: { unidad: "semana" | "mes"; etiquetas: string[]; aTiempo: number[]; tarde: number[] };
   /** "2026-10", en orden. */
   meses: string[];
   problemasPorMes: Record<AreaId, number[]>;
@@ -200,10 +215,12 @@ function armarCubetas(desde: string, hasta: string) {
   for (const fecha of dias) {
     const clave = claveDe(fecha);
     const ultima = cubetas[cubetas.length - 1];
-    if (ultima?.clave === clave) ultima.diasHabiles++;
-    else {
+    if (ultima?.clave === clave) {
+      ultima.diasHabiles++;
+      ultima.hasta = fecha;
+    } else {
       const etiqueta = unidad === "mes" ? `${MESES[Number(clave.slice(5)) - 1]} ${clave.slice(2, 4)}` : diaMes(clave);
-      cubetas.push({ clave, etiqueta, diasHabiles: 1 });
+      cubetas.push({ clave, etiqueta, diasHabiles: 1, hasta: fecha });
     }
   }
   const posicion = new Map(cubetas.map((c, i) => [c.clave, i]));
@@ -245,6 +262,8 @@ export function calcularReporte(
   const reprogramados = new Set<number>();
   const recojos = new Map<number, string>();
   const salidas = new Map<number, string>();
+  /** Día en que cada bloque salió de la planta. */
+  const finDeBloque = new Map<number, string>();
   // Días que cada área necesita para la mezcla de prendas que la planta terminó en el periodo.
   const cargaMezcla = new Map<AreaId, number>();
   let prendasMezcla = 0;
@@ -302,6 +321,7 @@ export function calcularReporte(
       pausados.delete(clave);
       if (b && area === b.ruta[b.ruta.length - 1]) {
         salidas.set(p.id, e.creado_en);
+        finDeBloque.set(b.id, diaDe(e.creado_en));
         if (enPeriodo(e.creado_en)) {
           prendasMezcla += cantidad;
           cargaMezcla.set("almacen", (cargaMezcla.get("almacen") ?? 0) + cantidad / ALMACEN.prendasPorDia);
@@ -444,11 +464,59 @@ export function calcularReporte(
     };
   });
 
-  const entregasPorCubeta = cubetas.map(() => ({ aTiempo: 0, tarde: 0 }));
+  const porMes = unidad === "mes";
+  const grupoDe = (fecha: string) => (porMes ? fecha.slice(0, 7) : lunesDe(fecha));
+  const grupos = [...new Set(cubetas.map((c) => grupoDe(c.hasta)))];
+  const cumplimiento: Reporte["cumplimiento"] = {
+    unidad: porMes ? "mes" : "semana",
+    etiquetas: grupos.map((g) => (porMes ? `${MESES[Number(g.slice(5)) - 1]} ${g.slice(2, 4)}` : `sem. ${diaMes(g)}`)),
+    aTiempo: grupos.map(() => 0),
+    tarde: grupos.map(() => 0),
+  };
   for (const x of entregas) {
-    const i = indice(`${x.listo}T12:00:00Z`);
-    if (i !== undefined && x.aTiempo !== null) entregasPorCubeta[i][x.aTiempo ? "aTiempo" : "tarde"]++;
+    const i = grupos.indexOf(grupoDe(x.listo));
+    if (i >= 0 && x.aTiempo !== null) cumplimiento[x.aTiempo ? "aTiempo" : "tarde"][i]++;
   }
+
+  // Lo aceptado frente a lo que la planta puede hacer.
+  const aceptadas = cubetas.map(() => 0);
+  const cargaAceptada = new Map<AreaId, number>();
+  let prendasAceptadas = 0;
+  let pedidosAceptados = 0;
+  for (const p of pedidos) {
+    if (!enPeriodo(p.creado_en)) continue;
+    const prendas = sumar(p.items, (x) => x.cantidad);
+    const i = indice(p.creado_en);
+    if (i !== undefined) aceptadas[i] += prendas;
+    prendasAceptadas += prendas;
+    pedidosAceptados++;
+    cargaAceptada.set("almacen", (cargaAceptada.get("almacen") ?? 0) + prendas / ALMACEN.prendasPorDia);
+    for (const b of p.bloques) {
+      for (const a of b.ruta) {
+        cargaAceptada.set(a, (cargaAceptada.get(a) ?? 0) + (b.cantidad * minutosPorPrenda(b.familia, a)) / AREAS[a].minutosPorDia);
+      }
+    }
+  }
+  const masCargada = [...cargaAceptada].sort((a, b) => b[1] - a[1])[0];
+  const demanda = masCargada
+    ? { prendas: prendasAceptadas, pedidos: pedidosAceptados, diasNecesarios: redondear(masCargada[1]), limita: masCargada[0] }
+    : null;
+
+  /** Prendas aceptadas hasta `dia` (incluido, o sin incluirlo) que todavía no habían salido de la planta. */
+  const pendienteAl = (dia: string, incluido: boolean) => {
+    const antes = (x: string) => (incluido ? x <= dia : x < dia);
+    return sumar(pedidos, (p) =>
+      antes(diaDe(p.creado_en))
+        ? sumar(p.bloques, (b) => {
+            // Sin movimiento a la vista, lo terminado salió antes de lo que se leyó.
+            const fin = finDeBloque.get(b.id) ?? (b.terminado || p.terminado ? "" : null);
+            return fin !== null && antes(fin) ? 0 : b.cantidad;
+          })
+        : 0,
+    );
+  };
+  const pendiente = cubetas.map((c) => pendienteAl(c.hasta, true));
+  const pendienteInicial = pendienteAl(diaDe(desde), false);
 
   const peor = [...areas].sort((a, b) => b.horasDeRetraso - a.horasDeRetraso || b.problemas - a.problemas)[0];
   const critica = peor.horasDeRetraso > 0 || peor.problemas > 0 ? peor : null;
@@ -465,7 +533,12 @@ export function calcularReporte(
     cubetas,
     produccion,
     capacidadPlanta,
-    entregasPorCubeta,
+    diasTrabajados: redondear(horasDisponibles / HORAS_POR_DIA),
+    aceptadas,
+    pendiente,
+    pendienteInicial,
+    demanda,
+    cumplimiento,
     meses,
     problemasPorMes,
     motivos,

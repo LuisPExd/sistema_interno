@@ -117,6 +117,25 @@ export async function GET(request: Request) {
 
   hoja(
     libro,
+    "Aceptado y pendiente",
+    [
+      { header: r.unidad === "mes" ? "Mes" : r.unidad === "semana" ? "Semana del" : "Día", key: "periodo", width: 14 },
+      { header: "Días trabajados", key: "diasHabiles", width: 16 },
+      { header: "Prendas aceptadas", key: "aceptadas", width: 18 },
+      { header: "Prendas terminadas", key: "terminadas", width: 20 },
+      { header: "Prendas pendientes al cierre", key: "pendiente", width: 28 },
+    ],
+    r.cubetas.map((c, i) => ({
+      periodo: c.clave,
+      diasHabiles: c.diasHabiles,
+      aceptadas: r.aceptadas[i],
+      terminadas: r.produccion.acabados[i],
+      pendiente: r.pendiente[i],
+    })),
+  );
+
+  hoja(
+    libro,
     "Entregas",
     [
       { header: "Pedido", key: "pedido", width: 10 },

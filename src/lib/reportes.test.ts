@@ -217,8 +217,17 @@ describe("análisis de producción: reparto del tiempo y cumplimiento", () => {
       // Listo el 9 y prometido el 10: a tiempo, lo recoja cuando lo recoja el cliente.
       { pedido: "P-0002", cliente: "Restaurante El Muelle", prometido: "2026-10-10", reprogramado: false, listo: "2026-10-09", entregado: "2026-10-10", aTiempo: true },
     ]);
-    expect(r.entregasPorCubeta[2]).toEqual({ aTiempo: 0, tarde: 1 });
-    expect(r.entregasPorCubeta[4]).toEqual({ aTiempo: 1, tarde: 0 });
+    expect(r.cumplimiento).toEqual({ unidad: "semana", etiquetas: ["sem. 5 oct"], aTiempo: [1], tarde: [1] });
+  });
+
+  it("compara lo aceptado con lo que la planta puede hacer y sigue lo pendiente", () => {
+    // Los dos pedidos se aceptaron el lunes: 130 prendas que piden 1,8 días a Confección.
+    expect(r.demanda).toEqual({ prendas: 130, pedidos: 2, diasNecesarios: 1.8, limita: "confeccion" });
+    expect(r.diasTrabajados).toBe(6);
+    expect(r.aceptadas).toEqual([130, 0, 0, 0, 0, 0]);
+    // El miércoles salen los 100 polos y el viernes los 30 mandiles.
+    expect(r.pendienteInicial).toBe(0);
+    expect(r.pendiente).toEqual([130, 130, 30, 30, 0, 0]);
   });
 
   it("la capacidad de la planta la fija el área más lenta para las prendas terminadas", () => {

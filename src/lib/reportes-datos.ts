@@ -33,7 +33,7 @@ function aReporte(p: PedidoFila): PedidoReporte {
     hay_tela: p.hay_tela,
     terminado: p.estado === "listo" || p.estado === "entregado",
     items: p.pedido_items,
-    bloques: p.bloques,
+    bloques: p.bloques.map((b) => ({ ...b, terminado: b.estado === "terminado" })),
   };
 }
 

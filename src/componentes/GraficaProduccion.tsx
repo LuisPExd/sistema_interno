@@ -24,8 +24,22 @@ export function GraficaProduccion({ reporte: r, area, planta }: { reporte: Repor
     );
   }
   const porDia = r.unidad !== "día";
+  const total = totales.reduce((n, v) => n + v, 0);
+  const promedio = r.diasTrabajados > 0 ? Math.round(total / r.diasTrabajados) : 0;
+  // Un área saca en un día más que la planta si tenía bloques acumulados, pero nunca más que su propia capacidad.
+  const excede = (v: number) => resumen.capacidadDia !== null && v > resumen.capacidadDia * 1.2;
   return (
-    <GraficaColumnas
+    <>
+      <p className="mb-3 text-lg text-gray-800">
+        <b>{total.toLocaleString("es-PE")}</b> prendas en el periodo · <b>{promedio}</b> por día trabajado
+        {capacidad ? (
+          <>
+            {" "}
+            · capacidad <b>{capacidad}</b> por día (<b>{Math.round((promedio / capacidad) * 100)} %</b> usado)
+          </>
+        ) : null}
+      </p>
+      <GraficaColumnas
       descripcion={`Prendas terminadas en ${resumen.nombre} por ${r.unidad}`}
       etiquetas={r.cubetas.map((c) => c.etiqueta)}
       // En semanas y meses se muestra el promedio por día trabajado, para poder compararlo con la capacidad.
@@ -39,7 +53,11 @@ export function GraficaProduccion({ reporte: r, area, planta }: { reporte: Repor
       notas={
         porDia
           ? totales.map((v) => `${v} prendas en ${r.unidad === "semana" ? "la semana" : "el mes"}`)
-          : r.cubetas.map((c) => (c.clave === hoy ? "Día en curso" : ""))
+          : r.cubetas.map((c, i) =>
+              [c.clave === hoy && "Día en curso", excede(totales[i]) && `Más de lo que ${resumen.nombre} puede sacar en un día`]
+                .filter(Boolean)
+                .join(". "),
+            )
       }
       referencia={
         capacidad
@@ -47,6 +65,12 @@ export function GraficaProduccion({ reporte: r, area, planta }: { reporte: Repor
           : undefined
       }
       unidad={porDia ? `Promedio de prendas por día trabajado, por ${r.unidad}` : "Prendas por día"}
-    />
+      />
+      {!porDia && totales.some(excede) && (
+        <p className="mt-2 text-sm text-amber-800">
+          Hay días con más de lo que {resumen.nombre} puede sacar en un día: suele pasar cuando se marca junto el trabajo de varios días.
+        </p>
+      )}
+    </>
   );
 }

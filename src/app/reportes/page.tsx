@@ -5,6 +5,7 @@ import { GraficaColumnas } from "@/componentes/GraficaColumnas";
 import { GraficaProduccion } from "@/componentes/GraficaProduccion";
 import { exigir } from "@/lib/acceso";
 import { ORDEN_AREAS, type AreaId } from "@/lib/catalogo";
+import { diasHabilesEntre } from "@/lib/calendario";
 import { fechaCorta, fechaHora, margenEnTexto } from "@/lib/formato";
 import type { PedidoVista } from "@/lib/planta";
 import { PERIODOS, cargarAnalisis, leerPeriodo, type Periodo } from "@/lib/reportes-datos";
@@ -84,6 +85,15 @@ async function Analisis({ searchParams }: Props) {
   const reprogramados = conFecha.filter((x) => x.reprogramado).length;
   const sinRecoger = r.entregas.filter((x) => !x.entregado).length;
   const limita = r.capacidadPlanta ? nombreDe[r.capacidadPlanta.limita] : null;
+  const tardeListos = conFecha.length - aTiempo;
+  const listos = [...r.entregas].reverse();
+
+  // Lo aceptado frente a lo que la planta puede hacer: días de trabajo que pide al área más cargada.
+  const d = r.demanda;
+  const razon = d && r.diasTrabajados > 0 ? d.diasNecesarios / r.diasTrabajados : null;
+  const pendienteHoy = r.pendiente[r.pendiente.length - 1] ?? 0;
+  const terminadas = r.produccion.acabados.reduce((n, v) => n + v, 0);
+  const veredicto = razon === null ? null : razon >= 1.1 ? "Sí." : razon > 0.9 ? "Está al límite." : "No.";
   const areaProduccion = area ?? "acabados";
   const conTramos = r.areas.filter((a) => a.medidos > 0);
   const tramosVistos = r.tramos.filter((t) => !area || t.area === area);
@@ -220,6 +230,35 @@ async function Analisis({ searchParams }: Props) {
       {/* 2. Qué pasó en el periodo. */}
       <section className="space-y-3">
         <h2 className={titulo}>Tendencia · {nombrePeriodo}</h2>
+        <Figura
+          pregunta="¿Se está aceptando más de lo que la planta puede producir?"
+          nota="Prendas aceptadas que todavía no han salido de la planta, al cierre de cada periodo. Si sube, entra más trabajo del que sale."
+        >
+          {!d || razon === null ? (
+            <SinDatos texto="No se aceptó ningún pedido en este periodo." />
+          ) : (
+            <>
+              <p className="text-lg text-gray-900">
+                <b className={razon >= 1.1 ? "text-red-700" : razon > 0.9 ? "text-amber-700" : "text-green-700"}>{veredicto}</b>{" "}
+                Se aceptaron {plural(d.pedidos, "pedido", "pedidos")} con {d.prendas.toLocaleString("es-PE")} prendas, que
+                piden <b>{dias(d.diasNecesarios)}</b> de trabajo a {nombreDe[d.limita]}, y el periodo tuvo{" "}
+                <b>{dias(r.diasTrabajados)}</b>: se aceptó el <b>{Math.round(razon * 100)} %</b> de lo que la planta puede
+                hacer. Salieron {terminadas.toLocaleString("es-PE")} prendas y lo pendiente pasó de{" "}
+                {r.pendienteInicial.toLocaleString("es-PE")} a <b>{pendienteHoy.toLocaleString("es-PE")}</b>.
+              </p>
+              <div className="mt-3 max-w-5xl">
+                <GraficaColumnas
+                  descripcion={`Prendas pendientes de producir al cierre de cada ${r.unidad}`}
+                  etiquetas={r.cubetas.map((c) => c.etiqueta)}
+                  series={[{ nombre: "Prendas pendientes", color: COLOR.proceso, valores: r.pendiente }]}
+                  notas={r.cubetas.map((_, i) => `Entraron ${r.aceptadas[i]} y salieron ${r.produccion.acabados[i]}`)}
+                  unidad={`Prendas pendientes al cierre de cada ${r.unidad}`}
+                  enteros
+                />
+              </div>
+            </>
+          )}
+        </Figura>
         <div className="grid gap-4 xl:grid-cols-[3fr_2fr]">
           <Figura
             pregunta={area ? `¿Cuánto produce ${nombreDe[area]}?` : "¿Cuánto está produciendo la planta?"}
@@ -239,17 +278,23 @@ async function Analisis({ searchParams }: Props) {
             {conFecha.length === 0 ? (
               <SinDatos texto="Ningún pedido quedó listo en este periodo." />
             ) : (
-              <GraficaColumnas
-                descripcion={`Pedidos que quedaron listos a tiempo y tarde por ${r.unidad}`}
-                etiquetas={r.cubetas.map((c) => c.etiqueta)}
-                series={[
-                  { nombre: "A tiempo", color: COLOR.bien, valores: r.entregasPorCubeta.map((x) => x.aTiempo) },
-                  { nombre: "Tarde", color: COLOR.mal, valores: r.entregasPorCubeta.map((x) => x.tarde) },
-                ]}
-                unidad={`Pedidos por ${r.unidad}`}
-                compacta
-                enteros
-              />
+              <>
+                <p className="mb-3 text-lg text-gray-800">
+                  <b>{plural(conFecha.length, "pedido quedó listo", "pedidos quedaron listos")}</b>: <b>{aTiempo}</b> a tiempo y{" "}
+                  <b className={tardeListos ? "text-red-700" : ""}>{tardeListos}</b> tarde.
+                </p>
+                <GraficaColumnas
+                  descripcion={`Pedidos que quedaron listos a tiempo y tarde por ${r.cumplimiento.unidad}`}
+                  etiquetas={r.cumplimiento.etiquetas}
+                  series={[
+                    { nombre: "A tiempo", color: COLOR.bien, valores: r.cumplimiento.aTiempo },
+                    { nombre: "Tarde", color: COLOR.mal, valores: r.cumplimiento.tarde },
+                  ]}
+                  unidad={`Pedidos por ${r.cumplimiento.unidad}`}
+                  compacta
+                  enteros
+                />
+              </>
             )}
           </Figura>
         </div>
@@ -337,6 +382,57 @@ async function Analisis({ searchParams }: Props) {
             <SinDatos texto="Ningún pedido cumple con estos filtros." />
           ) : (
             <TablaPedidos pedidos={pedidos} />
+          )}
+        </Figura>
+
+        <Figura
+          pregunta="¿Qué pedidos quedaron listos y cuándo?"
+          nota={`Los que la planta terminó en los ${nombrePeriodo}, del más reciente al más antiguo. La diferencia es en días de trabajo frente a la primera fecha prometida.`}
+        >
+          {listos.length === 0 ? (
+            <SinDatos texto="Ningún pedido quedó listo en este periodo." />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-base tabular-nums">
+                <thead className="text-sm text-gray-600">
+                  <tr>
+                    <th className="py-1 pr-3 font-semibold">Pedido</th>
+                    <th className="py-1 pr-3 font-semibold">Cliente</th>
+                    <th className="py-1 pr-3 font-semibold">Prometido</th>
+                    <th className="py-1 pr-3 font-semibold">Quedó listo</th>
+                    <th className="py-1 pr-3 font-semibold">Diferencia</th>
+                    <th className="py-1 font-semibold">Lo recibió el cliente</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {listos.slice(0, 15).map((x) => {
+                    const dif = x.prometido ? diasHabilesEntre(x.prometido, x.listo) : null;
+                    return (
+                      <tr key={x.pedido} className="border-t border-gray-200">
+                        <td className="py-1.5 pr-3 whitespace-nowrap">
+                          <Link href={`/pedido/${x.pedido}`} className="font-bold text-marca underline">
+                            {x.pedido}
+                          </Link>
+                        </td>
+                        <td className="py-1.5 pr-3">{x.cliente}</td>
+                        <td className="py-1.5 pr-3 whitespace-nowrap">
+                          {fechaCorta(x.prometido)}
+                          {x.reprogramado && <span className="text-gray-600"> · reprogramado</span>}
+                        </td>
+                        <td className="py-1.5 pr-3 whitespace-nowrap">{fechaCorta(x.listo)}</td>
+                        <td className={`py-1.5 pr-3 font-bold whitespace-nowrap ${dif !== null && dif > 0 ? "text-red-700" : "text-green-700"}`}>
+                          {dif === null ? "—" : dif > 0 ? `${dias(dif)} tarde` : dif < 0 ? `${dias(-dif)} antes` : "en la fecha"}
+                        </td>
+                        <td className="py-1.5 whitespace-nowrap">{x.entregado ? fechaCorta(x.entregado) : "todavía no"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {listos.length > 15 && (
+                <p className="mt-2 text-sm text-gray-600">Y {listos.length - 15} más: están todos en la hoja Entregas del Excel.</p>
+              )}
+            </div>
           )}
         </Figura>
 

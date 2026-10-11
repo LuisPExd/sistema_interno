@@ -1,14 +1,33 @@
-// Carga pedidos de demostración en distintos estados para probar el simulador y las pantallas.
+// Carga pedidos de demostración con unas cinco semanas de historia, para probar las pantallas y el análisis.
 //   npm run sembrar            borra los pedidos demo anteriores y crea otros nuevos
 //   npm run sembrar -- --borrar   solo borra los pedidos demo
 // Los pedidos demo se reconocen por el teléfono DEMO; los pedidos reales no se tocan.
+//
+// La historia cuenta el problema de la empresa: ventas acepta más trabajo del que la planta puede
+// hacer y promete cada fecha como si la planta estuviera vacía. La planta sí trabaja a su ritmo
+// (una cosa a la vez por área, en horario de trabajo), así que la cola crece y las entregas se atrasan.
 
 import { createClient } from "@supabase/supabase-js";
-import { diaHabil, hoyEnPeru } from "../src/lib/calendario";
-import { buscarProducto, dividirEnBloques, rutaDe, type AreaId, type Personalizacion } from "../src/lib/catalogo";
-import { estimar, trabajoDesdeItems, type Trabajo } from "../src/lib/simulador";
+import { diaHabil, esHabil, hoyEnPeru } from "../src/lib/calendario";
+import {
+  ALMACEN,
+  AREAS,
+  buscarProducto,
+  dividirEnBloques,
+  minutosPorPrenda,
+  rutaDe,
+  type AreaId,
+  type FamiliaId,
+  type Personalizacion,
+} from "../src/lib/catalogo";
+import { estimar, trabajoDesdeItems } from "../src/lib/simulador";
 
 const MARCA = "DEMO";
+/** Días de trabajo de historia. */
+const DIAS = 30;
+/** Trabajo que se acepta por cada día de capacidad de Confección. */
+const SOBRECARGA = 1.35;
+const HORAS_POR_DIA = 8;
 
 const db = createClient(new URL(process.env.SUPABASE_URL!).origin, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
   auth: { persistSession: false },
@@ -19,10 +38,18 @@ function ok<T extends { error: { message: string } | null }>(r: T): T {
   return r;
 }
 
-const azar = (min: number, max: number) => min + Math.floor(Math.random() * (max - min + 1));
-const elegir = <T>(lista: T[]): T => lista[azar(0, lista.length - 1)];
+// Azar con semilla fija: el demo sale igual cada vez.
+let semilla = 20261010;
+function azar01(): number {
+  semilla = (semilla + 0x6d2b79f5) | 0;
+  let t = Math.imul(semilla ^ (semilla >>> 15), 1 | semilla);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+const entre = (min: number, max: number) => min + azar01() * (max - min);
+const elegir = <T>(lista: T[]): T => lista[Math.floor(azar01() * lista.length)];
 /** Cantidad al azar, redondeada a la decena. */
-const cantidad = (min: number, max: number) => Math.round(azar(min, max) / 10) * 10;
+const cantidad = (min: number, max: number) => Math.round(entre(min, max) / 10) * 10;
 
 const CLIENTES = [
   ["Rosa Chunga", "Agroexportadora Valle Norte"],
@@ -39,187 +66,238 @@ const CLIENTES = [
 ];
 
 const COLORES = ["Azul marino", "Blanco", "Negro", "Gris", "Verde", "Rojo", "Beige"];
+const MOTIVOS = ["Máquina malograda", "Falta material", "Falta personal", "Otro problema: se fue la luz"];
 
-type Receta = {
-  nota: string;
-  items: [producto: string, cantidad: number, personalizacion?: Personalizacion][];
-  urgente?: boolean;
-  hayTela?: boolean;
-  /** Cómo va Almacén. Si no ha terminado, los bloques todavía no se mueven. */
-  almacen: "en_cola" | "en_proceso" | "terminado";
-  /** Paso del bloque más adelantado; cada bloque siguiente va un paso atrás. */
-  frente?: number;
-  /** El bloque más adelantado que sigue en planta queda detenido con este problema. */
-  problema?: string;
-  /** Horas que lleva en proceso el bloque más adelantado (para provocar "atascado"). */
-  horasEnProceso?: number;
-  /** Ya se entregó al cliente: aparece en el historial de entregados. */
-  entregado?: boolean;
-  /** Fuerza la fecha prometida a tantos días hábiles desde hoy (para provocar "entrega en riesgo"). */
-  prometidoEn?: number;
-};
+type ItemDemo = { producto: string; cantidad: number };
 
-const POLOS = ["polo-cuello-redondo", "polo-camisero", "polo-manga-larga"];
-const UNIFORMES = ["uniforme-camisa-pantalon", "mameluco", "camisa-corporativa", "chaqueta-chef"];
-
-const RECETAS: Receta[] = [
-  { nota: "Entregado", items: [[elegir(POLOS), cantidad(40, 90)]], almacen: "terminado", frente: 99, entregado: true },
-  { nota: "Entregado", items: [["chaqueta-chef", cantidad(20, 40)]], almacen: "terminado", frente: 99, entregado: true },
-  { nota: "Terminado, espera entrega", items: [[elegir(["mandil", "delantal"]), cantidad(60, 150)]], almacen: "terminado", frente: 99 },
-  { nota: "Muy avanzado", items: [[elegir(POLOS), cantidad(150, 250)]], almacen: "terminado", frente: 4 },
-  { nota: "A medio camino", items: [[elegir(UNIFORMES), cantidad(50, 100)]], almacen: "terminado", frente: 2 },
-  {
-    nota: "Detenido por máquina",
-    items: [["casaca-corporativa", cantidad(50, 80)]],
-    almacen: "terminado",
-    frente: 1,
-    problema: "Máquina malograda",
-  },
-  {
-    nota: "Atascado en Confección",
-    items: [["camisa-corporativa", cantidad(100, 150)]],
-    almacen: "terminado",
-    frente: 1,
-    horasEnProceso: 120,
-  },
-  {
-    nota: "Va a llegar tarde",
-    items: [
-      [elegir(POLOS), cantidad(100, 200)],
-      ["pantalon-industrial", cantidad(50, 100)],
-    ],
-    almacen: "terminado",
-    frente: 0,
-    prometidoEn: 2,
-  },
-  { nota: "Sublimado peregrino", items: [["polo-sublimado", cantidad(60, 200)]], almacen: "terminado", frente: 1 },
-  { nota: "Almacén comprando tela", items: [[elegir(UNIFORMES), cantidad(40, 80)]], almacen: "en_proceso", hayTela: false },
-  { nota: "Recién confirmado", items: [[elegir(POLOS), cantidad(60, 300)]], almacen: "en_cola" },
-  { nota: "Urgente por licitación", items: [["guardapolvo", cantidad(50, 120)]], almacen: "en_cola", urgente: true },
-  { nota: "Recién confirmado", items: [["gorro-cocina", cantidad(100, 200)], ["chaqueta-chef", cantidad(20, 50)]], almacen: "en_cola" },
+/** Pedidos típicos; los que se repiten salen más seguido. */
+const TIPOS: (() => ItemDemo[])[] = [
+  () => [{ producto: "polo-camisero", cantidad: cantidad(60, 160) }],
+  () => [{ producto: "polo-cuello-redondo", cantidad: cantidad(80, 200) }],
+  () => [{ producto: "polo-manga-larga", cantidad: cantidad(50, 120) }],
+  () => [{ producto: "polo-sublimado", cantidad: cantidad(60, 150) }],
+  () => [{ producto: "camisa-corporativa", cantidad: cantidad(40, 90) }],
+  () => [{ producto: "uniforme-camisa-pantalon", cantidad: cantidad(30, 60) }],
+  () => [{ producto: "chaqueta-chef", cantidad: cantidad(20, 50) }],
+  () => [{ producto: "mameluco", cantidad: cantidad(30, 50) }],
+  () => [{ producto: elegir(["mandil", "delantal"]), cantidad: cantidad(60, 150) }],
+  () => [
+    { producto: "gorro-cocina", cantidad: cantidad(60, 120) },
+    { producto: "chaqueta-chef", cantidad: cantidad(20, 40) },
+  ],
+  () => [
+    { producto: "polo-camisero", cantidad: cantidad(60, 120) },
+    { producto: "pantalon-industrial", cantidad: cantidad(30, 60) },
+  ],
+  () => [{ producto: "casaca-corporativa", cantidad: cantidad(30, 50) }],
 ];
 
-async function borrarDemo() {
-  const { data } = ok(await db.from("pedidos").delete().eq("cliente_telefono", MARCA).select("codigo"));
-  console.log(`Pedidos demo borrados: ${data!.length}`);
+// ---------- Tiempo ----------
+// El tiempo se cuenta en días de trabajo desde el inicio de la historia: 3,5 es el mediodía del cuarto día.
+
+/** Los últimos días de trabajo, del más antiguo a hoy (o al último, si hoy no se trabaja). */
+function diasDeTrabajo(): string[] {
+  const fechas: string[] = [];
+  const d = new Date(`${hoyEnPeru()}T00:00:00Z`);
+  while (fechas.length < DIAS) {
+    const fecha = d.toISOString().slice(0, 10);
+    if (esHabil(fecha)) fechas.unshift(fecha);
+    d.setUTCDate(d.getUTCDate() - 1);
+  }
+  return fechas;
 }
 
+type PasoDemo = { area: AreaId; inicio: number; fin: number; problema?: { desde: number; hasta: number; motivo: string } };
+type BloqueDemo = { item: number; cantidad: number; familia: FamiliaId; ruta: AreaId[]; pasos: PasoDemo[] };
+type PedidoDemo = {
+  cliente: string[];
+  llegada: number;
+  items: (ItemDemo & { personalizacion: Personalizacion })[];
+  hayTela: boolean;
+  prendas: number;
+  prometida: string;
+  almacen: { inicio: number; fin: number };
+  bloques: BloqueDemo[];
+  /** Cuándo sale el último bloque. */
+  listo: number;
+  recojo: number;
+};
+
 async function sembrar() {
+  const fechas = diasDeTrabajo();
   const hoy = hoyEnPeru();
-  const ahora = Date.now();
-  const cola: Trabajo[] = [];
-  const clientes = [...CLIENTES].sort(() => Math.random() - 0.5);
-  // Áreas que ya tienen un bloque demo en proceso: el simulador atiende uno a la vez por área.
-  const ocupadas = new Set<string>();
+  // Hasta dónde llega la historia: la hora de ahora si hoy se trabaja, o el cierre del último día.
+  const horaPeru = ((Date.now() - 5 * 3600000) % 86400000) / 3600000;
+  const ahora = fechas[DIAS - 1] === hoy ? DIAS - 1 + Math.min(1, Math.max(0, (horaPeru - 8) / HORAS_POR_DIA)) : DIAS;
+  const fechaDe = (t: number) => fechas[Math.min(DIAS - 1, Math.floor(t))];
+  const instante = (t: number) => {
+    const dia = Math.min(DIAS - 1, Math.floor(t));
+    const horas = 8 + 5 + (t - dia) * HORAS_POR_DIA;
+    return new Date(new Date(`${fechas[dia]}T00:00:00Z`).getTime() + horas * 3600000).toISOString();
+  };
 
-  for (const [n, receta] of RECETAS.entries()) {
-    const [nombre, empresa] = clientes[n % clientes.length];
-    const items = receta.items.map(([producto, cant, pers]) => ({
-      producto,
-      cantidad: cant,
-      personalizacion: pers ?? buscarProducto(producto)!.personalizacionPorDefecto,
+  // 1. Pedidos que ventas acepta: más trabajo del que Confección puede hacer.
+  const pedidos: PedidoDemo[] = [];
+  const libre: Record<string, number> = {};
+  for (let llegada = 0.2, n = 0; llegada < ahora; n++) {
+    const items = elegir(TIPOS)().map((i) => ({
+      ...i,
+      personalizacion: buscarProducto(i.producto)!.personalizacionPorDefecto,
     }));
+    const hayTela = azar01() > 0.12;
+    const prendas = items.reduce((s, i) => s + i.cantidad, 0);
+    // Ventas promete como si la planta estuviera vacía: no mira la cola.
+    const prometida = estimar([], trabajoDesdeItems(`demo-${n}`, items, { hayTela }), fechaDe(llegada)).fecha_estimada;
 
-    // La fecha prometida sale del mismo simulador, con los pedidos demo anteriores en cola.
-    const trabajo = trabajoDesdeItems(`demo-${n}`, items, { urgente: receta.urgente, hayTela: receta.hayTela });
-    const fechaPrometida = receta.prometidoEn
-      ? diaHabil(hoy, receta.prometidoEn)
-      : estimar(cola, trabajo, hoy).fecha_estimada;
-    // Lo ya terminado no ocupa capacidad para los pedidos que vienen después.
-    if (receta.frente !== 99) cola.push({ ...trabajo, fechaPrometida });
+    // 2. La planta lo trabaja en orden de llegada, una cosa a la vez por área.
+    const inicioAlmacen = Math.max(llegada, libre.almacen ?? 0);
+    const finAlmacen = inicioAlmacen + Math.max(ALMACEN.minimoDias, prendas / ALMACEN.prendasPorDia) * entre(0.9, 1.15);
+    libre.almacen = finAlmacen;
+    // La compra de tela retrasa al pedido pero no ocupa a Almacén.
+    const salida = finAlmacen + (hayTela ? 0 : ALMACEN.diasCompraSinTela);
 
-    const terminado = receta.frente === 99;
+    let carga = 0;
+    const bloques: BloqueDemo[] = items.flatMap((item, i) => {
+      const familia = buscarProducto(item.producto)!.familia;
+      const ruta = rutaDe(familia, item.personalizacion);
+      carga += ruta.includes("confeccion") ? (item.cantidad * minutosPorPrenda(familia, "confeccion")) / AREAS.confeccion.minutosPorDia : 0;
+      return dividirEnBloques(item.cantidad, familia).map((cant) => ({ item: i, cantidad: cant, familia, ruta, pasos: [] }));
+    });
+    for (const b of bloques) {
+      let listo = salida;
+      for (const area of b.ruta) {
+        const inicio = Math.max(listo, libre[area] ?? 0);
+        const duracion = ((b.cantidad * minutosPorPrenda(b.familia, area)) / AREAS[area].minutosPorDia) * entre(0.85, 1.2);
+        const paso: PasoDemo = { area, inicio, fin: inicio + duracion };
+        if (azar01() < 0.07) {
+          const desde = inicio + duracion * entre(0.2, 0.7);
+          const parada = entre(0.1, 0.8);
+          paso.problema = { desde, hasta: desde + parada, motivo: elegir(MOTIVOS) };
+          paso.fin += parada;
+        }
+        libre[area] = paso.fin;
+        listo = paso.fin;
+        b.pasos.push(paso);
+      }
+    }
+    const listo = Math.max(...bloques.map((b) => b.pasos[b.pasos.length - 1].fin));
+    pedidos.push({
+      cliente: CLIENTES[n % CLIENTES.length],
+      llegada,
+      items,
+      hayTela,
+      prendas,
+      prometida,
+      almacen: { inicio: inicioAlmacen, fin: salida },
+      bloques,
+      listo,
+      recojo: listo + entre(0.3, 2.5),
+    });
+    // El siguiente llega antes de que la planta pueda con este.
+    llegada += (Math.max(carga, 0.3) / SOBRECARGA) * entre(0.6, 1.4);
+  }
+
+  // 3. Se guarda todo lo que ya pasó; lo que falta queda como estado actual de la planta.
+  const yaPaso = (t: number) => t <= ahora;
+  let detenidoHoy = false;
+  let reprogramados = 0;
+  for (const [n, p] of pedidos.entries()) {
+    const terminado = yaPaso(p.listo);
+    const entregado = terminado && yaPaso(p.recojo);
+    const tarde = terminado && fechaDe(p.listo) > p.prometida;
+    // A dos de los que salieron tarde ventas les cambió la fecha: el análisis sigue contando la primera.
+    const reprogramar = tarde && reprogramados < 2 && p.listo - 1 > p.llegada;
+    const nuevaFecha = reprogramar ? diaHabil(fechaDe(p.listo), 1) : null;
+    if (reprogramar) reprogramados++;
+    const almacenEstado = yaPaso(p.almacen.fin) ? "terminado" : yaPaso(p.almacen.inicio) ? "en_proceso" : "en_cola";
+
     const { data: pedido } = ok(
       await db
         .from("pedidos")
         .insert({
-          cliente_nombre: nombre,
-          cliente_empresa: empresa,
+          cliente_nombre: p.cliente[0],
+          cliente_empresa: p.cliente[1],
           cliente_telefono: MARCA,
           canal: elegir(["web", "presencial"]),
-          urgente: receta.urgente ?? false,
-          hay_tela: receta.hayTela ?? true,
-          estado: receta.entregado
-            ? "entregado"
-            : terminado
-              ? "listo"
-              : receta.almacen === "en_cola"
-                ? "confirmado"
-                : "en_produccion",
-          almacen_estado: receta.almacen,
-          almacen_inicio: receta.almacen === "en_proceso" ? new Date(ahora - 2 * 3600000).toISOString() : null,
-          fecha_prometida: fechaPrometida,
+          // Uno de los que siguen en cola va como urgente, para ver cómo pasa delante.
+          urgente: !terminado && n === pedidos.length - 3,
+          hay_tela: p.hayTela,
+          estado: entregado ? "entregado" : terminado ? "listo" : almacenEstado === "en_cola" ? "confirmado" : "en_produccion",
+          almacen_estado: almacenEstado,
+          almacen_inicio: almacenEstado === "en_proceso" ? instante(p.almacen.inicio) : null,
+          fecha_prometida: nuevaFecha ?? p.prometida,
+          creado_en: instante(p.llegada),
         })
         .select("id, codigo")
         .single(),
     );
+    const id = pedido!.id;
 
     const { data: filasItems } = ok(
       await db
         .from("pedido_items")
-        .insert(
-          items.map((i) => ({
-            pedido_id: pedido!.id,
-            producto: i.producto,
-            cantidad: i.cantidad,
-            personalizacion: i.personalizacion,
-            color: elegir(COLORES),
-          })),
-        )
+        .insert(p.items.map((i) => ({ pedido_id: id, producto: i.producto, cantidad: i.cantidad, personalizacion: i.personalizacion, color: elegir(COLORES) })))
         .select("id"),
     );
 
-    let numero = 0;
-    const vistos = new Set<string>();
-    const bloques = items.flatMap((item, i) => {
-      const familia = buscarProducto(item.producto)!.familia;
-      const ruta = rutaDe(familia, item.personalizacion);
-      return dividirEnBloques(item.cantidad, familia).map((cant) => {
-        const paso =
-          receta.almacen === "terminado" ? Math.max(0, Math.min(ruta.length, (receta.frente ?? 0) - numero)) : 0;
-        numero++;
-        const fin = paso >= ruta.length;
-        // El bloque más adelantado del pedido es el líder; está en proceso si su área está libre
-        // o si la receta lo necesita en proceso para mostrar un problema o un atasco.
-        const lider = receta.almacen === "terminado" && !fin && vistos.size === 0;
-        if (!fin) vistos.add(ruta[paso]);
-        const forzado = Boolean(receta.problema || receta.horasEnProceso);
-        const primero = lider && (forzado || !ocupadas.has(ruta[paso]));
-        if (primero) ocupadas.add(ruta[paso]);
-        const horas = lider && receta.horasEnProceso ? receta.horasEnProceso : azar(1, 3);
-        return {
-          pedido_id: pedido!.id,
-          item_id: filasItems![i].id,
-          numero,
-          cantidad: cant,
-          familia,
-          ruta,
-          paso,
-          estado: fin ? "terminado" : lider && receta.problema ? "detenido" : primero ? "en_proceso" : "en_cola",
-          inicio_paso: primero ? new Date(ahora - horas * 3600000).toISOString() : null,
-        };
-      });
+    const filas = p.bloques.map((b, i) => {
+      const hechos = b.pasos.filter((x) => yaPaso(x.fin)).length;
+      const actual = b.pasos[hechos];
+      const empezo = actual && almacenEstado === "terminado" && yaPaso(actual.inicio);
+      let estado = !actual ? "terminado" : empezo ? "en_proceso" : "en_cola";
+      if (empezo && actual.problema && yaPaso(actual.problema.desde) && !yaPaso(actual.problema.hasta)) estado = "detenido";
+      // Para que el tablero muestre un problema abierto: se detiene un bloque fuera de Confección.
+      if (estado === "en_proceso" && !detenidoHoy && actual.area !== "confeccion" && !actual.problema) {
+        actual.problema = { desde: Math.max(actual.inicio, ahora - 0.2), hasta: ahora + 1, motivo: "Máquina malograda" };
+        estado = "detenido";
+      }
+      if (estado === "detenido") detenidoHoy = true;
+      return {
+        pedido_id: id,
+        item_id: filasItems![b.item].id,
+        numero: i + 1,
+        cantidad: b.cantidad,
+        familia: b.familia,
+        ruta: b.ruta,
+        paso: hechos,
+        estado,
+        inicio_paso: empezo ? instante(actual.inicio) : null,
+      };
     });
-    const { data: filasBloques } = ok(await db.from("bloques").insert(bloques).select("id, ruta, paso, estado"));
+    const { data: filasBloques } = ok(await db.from("bloques").insert(filas).select("id, numero"));
+    const idDe = new Map(filasBloques!.map((f) => [f.numero, f.id]));
 
-    // Historial mínimo: lo que está en proceso empezó, lo detenido reportó problema,
-    // y parte de lo que ya avanzó salió hoy del área anterior.
-    const eventos: Record<string, unknown>[] = [{ pedido_id: pedido!.id, bloque_id: null, area: "ventas", tipo: "empezar" }];
-    if (receta.entregado) {
-      eventos.push({ pedido_id: pedido!.id, bloque_id: null, area: "ventas", tipo: "terminar" });
-    }
-    for (const b of filasBloques!) {
-      const base = { pedido_id: pedido!.id, bloque_id: b.id };
-      const area = (b.ruta as AreaId[])[b.paso];
-      if (b.estado === "en_proceso" || b.estado === "detenido") eventos.push({ ...base, area, tipo: "empezar" });
-      if (b.estado === "detenido") eventos.push({ ...base, area, tipo: "problema", detalle: receta.problema });
-      if (b.paso > 0 && Math.random() < 0.5) eventos.push({ ...base, area: b.ruta[b.paso - 1], tipo: "terminar" });
-    }
+    const eventos: Record<string, unknown>[] = [];
+    const anotar = (t: number, area: string, tipo: string, bloque: number | null = null, detalle: string | null = null) => {
+      if (yaPaso(t)) eventos.push({ pedido_id: id, bloque_id: bloque, area, tipo, detalle, creado_en: instante(t) });
+    };
+    anotar(p.llegada, "ventas", "empezar");
+    anotar(p.almacen.inicio, "almacen", "empezar");
+    anotar(p.almacen.fin, "almacen", "terminar");
+    p.bloques.forEach((b, i) => {
+      for (const x of b.pasos) {
+        anotar(x.inicio, x.area, "empezar", idDe.get(i + 1));
+        if (x.problema) {
+          anotar(x.problema.desde, x.area, "problema", idDe.get(i + 1), x.problema.motivo);
+          anotar(x.problema.hasta, x.area, "resuelto", idDe.get(i + 1));
+        }
+        anotar(x.fin, x.area, "terminar", idDe.get(i + 1));
+      }
+    });
+    if (reprogramar) anotar(p.listo - 1, "ventas", "resuelto", null, `Fecha prometida: de ${p.prometida} a ${nuevaFecha}`);
+    if (entregado) anotar(p.recojo, "ventas", "terminar");
     ok(await db.from("eventos").insert(eventos));
 
-    const resumen = items.map((i) => `${i.cantidad} ${buscarProducto(i.producto)!.nombre}`).join(" + ");
-    console.log(`${pedido!.codigo}  ${receta.nota.padEnd(26)} ${resumen}  (${bloques.length} bloques, prometido ${fechaPrometida})`);
+    const resumen = p.items.map((i) => `${i.cantidad} ${buscarProducto(i.producto)!.nombre}`).join(" + ");
+    const nota = terminado ? `listo ${fechaDe(p.listo)}${tarde ? " TARDE" : ""}` : "en planta";
+    console.log(`${pedido!.codigo}  aceptado ${fechaDe(p.llegada)}  prometido ${p.prometida}  ${nota.padEnd(22)} ${resumen}`);
   }
+  console.log(`Pedidos demo creados: ${pedidos.length}, del ${fechas[0]} al ${fechas[DIAS - 1]}.`);
+}
+
+async function borrarDemo() {
+  const { data } = ok(await db.from("pedidos").delete().eq("cliente_telefono", MARCA).select("codigo"));
+  console.log(`Pedidos demo borrados: ${data!.length}`);
 }
 
 async function principal() {
