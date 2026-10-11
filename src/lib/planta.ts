@@ -477,6 +477,9 @@ export async function cargarPlanta(): Promise<Planta> {
   for (const area of ORDEN_AREAS) {
     const nombre = AREAS[area].nombre;
     const lista = tarjetas[area];
+    // El área trabaja uno tras otro lo que tiene en proceso: un bloque puede tardar lo que suman todos.
+    const juntos = lista.filter((t) => t.estado === "en_proceso");
+    const esperadoJuntos = juntos.reduce((n, t) => n + t.horasEsperadas, 0);
     for (const t of lista) {
       if (t.estado === "detenido") {
         alertas.push({
@@ -487,11 +490,17 @@ export async function cargarPlanta(): Promise<Planta> {
         });
       } else if (t.estado === "en_proceso") {
         const horas = t.horasTranscurridas;
-        if (horas > t.horasEsperadas * UMBRAL_ATASCO && horas - t.horasEsperadas > 1) {
+        // Sin tela, Almacén espera además los días de compra.
+        const limite = esperadoJuntos + (area === "almacen" && t.aviso ? ALMACEN.diasCompraSinTela * HORAS_POR_DIA : 0);
+        if (horas > limite * UMBRAL_ATASCO && horas - limite > 1) {
+          const debia =
+            juntos.length > 1
+              ? `con los otros ${juntos.length - 1} que ${nombre} tiene en proceso debía tomar ${enDias(limite)}`
+              : `debía tomar ${enDias(limite)}`;
           alertas.push({
             nivel: "rojo",
             titulo: `Atascado en ${nombre}`,
-            texto: `${t.pedido}: ${t.titulo} lleva ${enDias(horas)} en proceso y debía tomar ${enDias(t.horasEsperadas)} (capacidad: ${t.capacidadDia} por día).`,
+            texto: `${t.pedido}: ${t.titulo} lleva ${enDias(horas)} en proceso y ${debia} (capacidad: ${t.capacidadDia} por día).`,
             accion: `Preguntar a ${nombre} qué pasó: puede haber una máquina malograda o falta de personal sin reportar.`,
           });
         }

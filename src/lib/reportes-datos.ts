@@ -1,6 +1,7 @@
 // Lee de Supabase lo que necesita el análisis de producción y lo pasa al cálculo de reportes.ts.
 import "server-only";
 import { connection } from "next/server";
+import { hoyEnPeru } from "./calendario";
 import { db } from "./db";
 import { cargarPedidos, cargarPlanta, leerTodo, type PedidoFila, type Planta } from "./planta";
 import { calcularReporte, type EventoReporte, type PedidoReporte, type Reporte } from "./reportes";
@@ -29,6 +30,8 @@ function aReporte(p: PedidoFila): PedidoReporte {
     cliente: p.cliente_empresa || p.cliente_nombre,
     creado_en: p.creado_en,
     fecha_prometida: p.fecha_prometida,
+    hay_tela: p.hay_tela,
+    terminado: p.estado === "listo" || p.estado === "entregado",
     items: p.pedido_items,
     bloques: p.bloques,
   };
@@ -52,6 +55,27 @@ async function cargarEventos(desde: string): Promise<EventoReporte[]> {
   return eventos;
 }
 
+/** Reprogramaciones anteriores a lo leído: de la primera sale la fecha que se prometió al confirmar. */
+async function cargarReprogramaciones(antesDe: string): Promise<EventoReporte[]> {
+  const { data, error } = await db()
+    .from("eventos")
+    .select("pedido_id, bloque_id, area, tipo, detalle, creado_en")
+    .eq("area", "ventas")
+    .eq("tipo", "resuelto")
+    .like("detalle", "Fecha prometida:%")
+    .lt("creado_en", antesDe)
+    .order("creado_en");
+  if (error) throw new Error(error.message);
+  return data as EventoReporte[];
+}
+
+/** Las 00:00 de Perú del primer día del periodo: "7 días" son hoy y los seis anteriores, completos. */
+function inicioDePeriodo(dias: number): Date {
+  const d = new Date(`${hoyEnPeru()}T05:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - (dias - 1));
+  return d;
+}
+
 export type Analisis = {
   /** Lo que pasó en el periodo. */
   reporte: Reporte;
@@ -61,19 +85,20 @@ export type Analisis = {
 
 export async function cargarAnalisis(periodo: Periodo): Promise<Analisis> {
   await connection();
-  const ahora = Date.now();
-  const { dias } = PERIODOS[periodo];
-  const [planta, pedidos, eventos] = await Promise.all([
+  const desde = inicioDePeriodo(PERIODOS[periodo].dias);
+  const desdeEventos = new Date(desde.getTime() - DIAS_PREVIOS * DIA_MS).toISOString();
+  const [planta, pedidos, eventos, reprogramaciones] = await Promise.all([
     cargarPlanta(),
     // cargarPedidos también pone en uso la configuración de planta, de la que sale lo planificado.
     cargarPedidos(["confirmado", "en_produccion", "listo", "entregado"]),
-    cargarEventos(new Date(ahora - (dias + DIAS_PREVIOS) * DIA_MS).toISOString()),
+    cargarEventos(desdeEventos),
+    cargarReprogramaciones(desdeEventos),
   ]);
   const reporte = calcularReporte(
     pedidos.map(aReporte),
-    eventos,
-    new Date(ahora - dias * DIA_MS).toISOString(),
-    new Date(ahora).toISOString(),
+    [...reprogramaciones, ...eventos],
+    desde.toISOString(),
+    new Date().toISOString(),
   );
   return { reporte, planta };
 }
@@ -81,12 +106,11 @@ export async function cargarAnalisis(periodo: Periodo): Promise<Analisis> {
 /** Producción de las últimas dos semanas para el dashboard, con la lectura que ya está en memoria. */
 export async function cargarProduccionReciente(): Promise<Reporte> {
   await connection();
-  const ahora = Date.now();
   const { pedidos, eventos } = await leerTodo();
   return calcularReporte(
     pedidos.filter((p) => p.estado !== "cancelado").map(aReporte),
     eventos,
-    new Date(ahora - 14 * DIA_MS).toISOString(),
-    new Date(ahora).toISOString(),
+    inicioDePeriodo(14).toISOString(),
+    new Date().toISOString(),
   );
 }

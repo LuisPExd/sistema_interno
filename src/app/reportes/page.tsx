@@ -81,6 +81,9 @@ async function Analisis({ searchParams }: Props) {
   // ---------- Periodo ----------
   const conFecha = r.entregas.filter((x) => x.aTiempo !== null);
   const aTiempo = conFecha.filter((x) => x.aTiempo).length;
+  const reprogramados = conFecha.filter((x) => x.reprogramado).length;
+  const sinRecoger = r.entregas.filter((x) => !x.entregado).length;
+  const limita = r.capacidadPlanta ? nombreDe[r.capacidadPlanta.limita] : null;
   const areaProduccion = area ?? "acabados";
   const conTramos = r.areas.filter((a) => a.medidos > 0);
   const tramosVistos = r.tramos.filter((t) => !area || t.area === area);
@@ -159,9 +162,19 @@ async function Analisis({ searchParams }: Props) {
             tono={tarde > 0 ? "alerta" : "bien"}
           />
           <Cifra
-            etiqueta={`Entregas a tiempo, ${nombrePeriodo}`}
+            etiqueta={`Pedidos listos a tiempo, ${nombrePeriodo}`}
             valor={conFecha.length ? `${Math.round((aTiempo / conFecha.length) * 100)} %` : "—"}
-            detalle={conFecha.length ? `${aTiempo} de ${plural(conFecha.length, "pedido entregado", "pedidos entregados")}` : "sin entregas en el periodo"}
+            detalle={
+              conFecha.length
+                ? [
+                    `${aTiempo} de ${plural(conFecha.length, "pedido terminado", "pedidos terminados")}`,
+                    reprogramados && plural(reprogramados, "reprogramado", "reprogramados"),
+                    sinRecoger && `${sinRecoger} sin recoger`,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")
+                : "ningún pedido quedó listo en el periodo"
+            }
             tono={conFecha.length === 0 ? "normal" : aTiempo === conFecha.length ? "bien" : "alerta"}
           />
           <Cifra
@@ -213,18 +226,21 @@ async function Analisis({ searchParams }: Props) {
             nota={
               area
                 ? `Prendas que ${nombreDe[area]} terminó. La línea es lo que puede sacar por día con las prendas que trabajó.`
-                : "Prendas terminadas, es decir, las que salieron de Acabados. La línea es lo que Acabados puede sacar por día."
+                : `Prendas terminadas, es decir, las que salieron de Acabados. La línea es lo que la planta puede sacar por día con esas prendas${limita ? `: la limita ${limita}` : ""}.`
             }
           >
-            <GraficaProduccion reporte={r} area={areaProduccion} />
+            <GraficaProduccion reporte={r} area={areaProduccion} planta={!area} />
           </Figura>
 
-          <Figura pregunta="¿Estamos cumpliendo las entregas?" nota="Pedidos entregados, según la fecha que se le prometió al cliente.">
+          <Figura
+            pregunta="¿Estamos cumpliendo las fechas prometidas?"
+            nota="Pedidos que la planta dejó listos, frente a la primera fecha que se le prometió al cliente. Reprogramar no la cambia."
+          >
             {conFecha.length === 0 ? (
-              <SinDatos texto="No se entregó ningún pedido en este periodo." />
+              <SinDatos texto="Ningún pedido quedó listo en este periodo." />
             ) : (
               <GraficaColumnas
-                descripcion={`Pedidos entregados a tiempo y tarde por ${r.unidad}`}
+                descripcion={`Pedidos que quedaron listos a tiempo y tarde por ${r.unidad}`}
                 etiquetas={r.cubetas.map((c) => c.etiqueta)}
                 series={[
                   { nombre: "A tiempo", color: COLOR.bien, valores: r.entregasPorCubeta.map((x) => x.aTiempo) },
@@ -296,7 +312,8 @@ async function Analisis({ searchParams }: Props) {
                       planificado y {plural(r.critica.problemas, "problema", "problemas")}.{" "}
                     </>
                   )}
-                  En total la planta estuvo detenida {horas(r.areas.reduce((n, a) => n + a.horasDetenida, 0))} de trabajo.
+                  Sumando las áreas, hubo {horas(r.areas.reduce((n, a) => n + a.horasDetenida, 0))} de trabajo con algo
+                  detenido.
                 </p>
               </>
             )}
@@ -392,7 +409,8 @@ async function Analisis({ searchParams }: Props) {
       </section>
 
       <p className="text-sm text-gray-500">
-        Las horas son de trabajo: lunes a sábado, de 8:00 a 16:00. Lo planificado sale de los minutos por prenda y la
+        Las horas son de trabajo: lunes a sábado, de 8:00 a 16:00. Cuando un área tiene varios bloques en proceso a la
+        vez, el tiempo se reparte entre ellos. El periodo cuenta días completos, incluido hoy. Lo planificado sale de los minutos por prenda y la
         capacidad de Configuración. El Excel trae todas las áreas del periodo elegido, sin el filtro de área.
       </p>
     </main>

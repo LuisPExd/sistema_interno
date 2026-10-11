@@ -90,10 +90,11 @@ async function Dashboard({ searchParams }: Props) {
           )}
         </div>
         <p className="mt-0.5 text-base text-gray-600">
-          Prendas terminadas por día en las últimas dos semanas. La línea es lo que Acabados puede sacar por día.
+          Prendas terminadas por día en las últimas dos semanas. La línea es lo que la planta puede sacar por día con esas
+          prendas.
         </p>
         <div className="mt-4 max-w-5xl">
-          <GraficaProduccion reporte={produccion} area="acabados" />
+          <GraficaProduccion reporte={produccion} area="acabados" planta />
         </div>
       </figure>
 

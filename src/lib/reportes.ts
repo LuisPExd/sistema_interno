@@ -9,6 +9,9 @@ export type PedidoReporte = {
   cliente: string;
   creado_en: string;
   fecha_prometida: string | null;
+  hay_tela: boolean;
+  /** Ya salió de la planta: está listo o entregado. */
+  terminado: boolean;
   items: { id: number; producto: string; cantidad: number }[];
   bloques: {
     id: number;
@@ -44,10 +47,18 @@ export type Tramo = {
   inicio: string | null;
   fin: string;
   horasEspera: number | null;
-  /** De EMPEZAR a TERMINADO, incluido lo que estuvo detenido. */
+  /**
+   * Lo que el área le dedicó más lo que estuvo detenido. Si el área tenía varios bloques en
+   * proceso a la vez, el tiempo se reparte entre ellos.
+   */
   horasReales: number | null;
+  /** De EMPEZAR a TERMINADO sin repartir. */
+  horasReloj: number | null;
   horasDetenido: number;
+  /** En Almacén incluye la espera por la compra de tela. */
   horasPlan: number;
+  /** Parte de lo planificado que es esperar la compra de tela: no ocupa al área. */
+  horasCompra: number;
 };
 
 export type Problema = {
@@ -63,12 +74,18 @@ export type Problema = {
   horasDetenido: number;
 };
 
+/** Un pedido que la planta dejó listo en el periodo. Las fechas son de Perú. */
 export type Entrega = {
   pedido: string;
   cliente: string;
+  /** Primera fecha que se le prometió al cliente: reprogramar no la cambia. */
   prometido: string | null;
-  /** Fecha de Perú. */
-  entregado: string;
+  reprogramado: boolean;
+  /** Cuándo salió de la planta su último bloque. */
+  listo: string;
+  /** Cuándo lo recibió el cliente; null si todavía no. */
+  entregado: string | null;
+  /** Quedó listo en la fecha prometida original o antes. */
   aTiempo: boolean | null;
 };
 
@@ -96,6 +113,7 @@ export type ResumenArea = {
   /** Parte de la capacidad del periodo que se usó, de 0 a 1. */
   uso: number;
   problemas: number;
+  /** Horas de trabajo del periodo en que el área tuvo algo detenido; dos bloques a la vez no suman doble. */
   horasDetenida: number;
 };
 
@@ -114,6 +132,9 @@ export type Reporte = {
   cubetas: Cubeta[];
   /** Prendas terminadas por área en cada cubeta. Lo que sale de Acabados es lo que produce la planta. */
   produccion: Record<AreaId, number[]>;
+  /** Lo que la planta puede terminar por día con la mezcla de prendas del periodo, y el área que lo limita. */
+  capacidadPlanta: { prendasDia: number; limita: AreaId } | null;
+  /** Por la fecha en que quedaron listos. */
   entregasPorCubeta: { aTiempo: number; tarde: number }[];
   /** "2026-10", en orden. */
   meses: string[];
@@ -146,6 +167,21 @@ function lunesDe(fecha: string): string {
   d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
   return d.toISOString().slice(0, 10);
 }
+
+/** Horas de trabajo entre dos instantes, sin el tope de días de horasHabilesEntre. */
+function horasDeTrabajo(desde: string, hasta: string): number {
+  const TRAMO = 60 * 24 * 3600000;
+  const fin = new Date(hasta).getTime();
+  let horas = 0;
+  for (let a = new Date(desde).getTime(); a < fin; a += TRAMO) {
+    horas += horasHabilesEntre(new Date(a), new Date(Math.min(fin, a + TRAMO)));
+  }
+  return horas;
+}
+
+// Apunte que deja ventas al reprogramar: "Fecha prometida: de 2026-10-07 a 2026-10-12".
+const REPROGRAMACION = /^Fecha prometida: de (\S+) a /;
+const ES_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
 const diaMes = (fecha: string) => `${Number(fecha.slice(8))} ${MESES[Number(fecha.slice(5, 7)) - 1]}`;
 
@@ -197,23 +233,52 @@ export function calcularReporte(
   const inicios = new Map<string, string>();
   const detenido = new Map<string, number>();
   const abiertos = new Map<string, Problema>();
+  // Reparto del tiempo: por área, qué se está trabajando y qué tiene un problema abierto.
+  const enProceso = new Map<AreaId, Set<string>>(ORDEN_AREAS.map((a) => [a, new Set<string>()]));
+  const parados = new Map<AreaId, Set<string>>(ORDEN_AREAS.map((a) => [a, new Set<string>()]));
+  const pausados = new Set<string>();
+  const trabajado = new Map<string, number>();
+  const reloj = new Map<AreaId, string>();
+  const paro = new Map<AreaId, number>();
+  // Por pedido: promesa original, recojo del cliente y salida del último bloque.
+  const originales = new Map<number, string>();
+  const reprogramados = new Set<number>();
+  const recojos = new Map<number, string>();
+  const salidas = new Map<number, string>();
+  // Días que cada área necesita para la mezcla de prendas que la planta terminó en el periodo.
+  const cargaMezcla = new Map<AreaId, number>();
+  let prendasMezcla = 0;
+
+  /** Lleva el reloj del área hasta `instante`: reparte ese rato entre lo que tenía en proceso. */
+  const avanzar = (area: AreaId, instante: string) => {
+    const antes = reloj.get(area);
+    reloj.set(area, instante);
+    if (!antes || instante <= antes) return;
+    const activos = enProceso.get(area)!;
+    if (activos.size) {
+      const parte = horasEntre(antes, instante) / activos.size;
+      for (const c of activos) trabajado.set(c, (trabajado.get(c) ?? 0) + parte);
+    }
+    if (parados.get(area)!.size && instante > desde) {
+      paro.set(area, (paro.get(area) ?? 0) + horasEntre(antes < desde ? desde : antes, instante));
+    }
+  };
 
   for (const e of ordenados) {
     const p = porId.get(e.pedido_id);
     if (!p) continue;
 
     if (e.area === "ventas") {
-      // Ventas anota el registro (empezar) y la entrega (terminar); lo demás son apuntes de prioridad.
+      // Ventas anota el registro (empezar), la entrega (terminar) y las reprogramaciones; lo demás son apuntes de prioridad.
       if (e.tipo === "empezar") llegadas.set(`almacen|p${p.id}`, e.creado_en);
-      else if (e.tipo === "terminar" && enPeriodo(e.creado_en)) {
-        const entregado = diaDe(e.creado_en);
-        entregas.push({
-          pedido: p.codigo,
-          cliente: p.cliente,
-          prometido: p.fecha_prometida,
-          entregado,
-          aTiempo: p.fecha_prometida ? entregado <= p.fecha_prometida : null,
-        });
+      else if (e.tipo === "terminar") recojos.set(p.id, diaDe(e.creado_en));
+      else if (e.tipo === "resuelto") {
+        const de = e.detalle?.match(REPROGRAMACION)?.[1];
+        if (de) {
+          reprogramados.add(p.id);
+          // Vale la primera: es la fecha que se le dio al cliente al confirmar.
+          if (!originales.has(p.id) && ES_FECHA.test(de)) originales.set(p.id, de);
+        }
       }
       continue;
     }
@@ -224,11 +289,27 @@ export function calcularReporte(
     const clave = `${area}|${b ? `b${b.id}` : `p${p.id}`}`;
     const cantidad = b ? b.cantidad : sumar(p.items, (i) => i.cantidad);
     const base = { pedido: p.codigo, cliente: p.cliente, bloque: b ? b.numero : null, area };
+    avanzar(area, e.creado_en);
 
     if (e.tipo === "empezar") {
       inicios.set(clave, e.creado_en);
       detenido.set(clave, 0);
+      trabajado.set(clave, 0);
+      enProceso.get(area)!.add(clave);
     } else if (e.tipo === "terminar") {
+      enProceso.get(area)!.delete(clave);
+      parados.get(area)!.delete(clave);
+      pausados.delete(clave);
+      if (b && area === b.ruta[b.ruta.length - 1]) {
+        salidas.set(p.id, e.creado_en);
+        if (enPeriodo(e.creado_en)) {
+          prendasMezcla += cantidad;
+          cargaMezcla.set("almacen", (cargaMezcla.get("almacen") ?? 0) + cantidad / ALMACEN.prendasPorDia);
+          for (const a of b.ruta) {
+            cargaMezcla.set(a, (cargaMezcla.get(a) ?? 0) + (cantidad * minutosPorPrenda(b.familia, a)) / AREAS[a].minutosPorDia);
+          }
+        }
+      }
       // Lo que termina aquí queda disponible para el área siguiente de su ruta.
       if (b) {
         const siguiente = b.ruta[b.ruta.indexOf(area) + 1];
@@ -243,6 +324,8 @@ export function calcularReporte(
       const dias = b
         ? (cantidad * minutosPorPrenda(b.familia, area)) / AREAS[area].minutosPorDia
         : Math.max(ALMACEN.minimoDias, cantidad / ALMACEN.prendasPorDia);
+      // La compra de tela retrasa al pedido pero no ocupa a Almacén, igual que en el simulador.
+      const diasCompra = b || p.hay_tela ? 0 : ALMACEN.diasCompraSinTela;
       const llegada = llegadas.get(clave) ?? (b ? null : p.creado_en);
       const medido = inicio !== undefined;
       tramos.push({
@@ -255,9 +338,11 @@ export function calcularReporte(
         inicio: inicio ?? null,
         fin: e.creado_en,
         horasEspera: llegada && medido ? redondear(horasEntre(llegada, inicio)) : null,
-        horasReales: medido ? redondear(horasEntre(inicio, e.creado_en)) : null,
+        horasReales: medido ? redondear((trabajado.get(clave) ?? 0) + (detenido.get(clave) ?? 0)) : null,
+        horasReloj: medido ? redondear(horasEntre(inicio, e.creado_en)) : null,
         horasDetenido: medido ? redondear(detenido.get(clave) ?? 0) : 0,
-        horasPlan: redondear(dias * HORAS_POR_DIA),
+        horasPlan: redondear((dias + diasCompra) * HORAS_POR_DIA),
+        horasCompra: diasCompra * HORAS_POR_DIA,
       });
     } else if (e.tipo === "problema") {
       const texto = e.detalle?.trim() || "Sin detalle";
@@ -271,10 +356,14 @@ export function calcularReporte(
         horasDetenido: 0,
       };
       abiertos.set(clave, problema);
+      parados.get(area)!.add(clave);
+      if (enProceso.get(area)!.delete(clave)) pausados.add(clave);
       if (enPeriodo(e.creado_en)) problemas.push(problema);
     } else {
       const problema = abiertos.get(clave);
       abiertos.delete(clave);
+      parados.get(area)!.delete(clave);
+      if (pausados.delete(clave)) enProceso.get(area)!.add(clave);
       if (!problema) continue;
       const horas = horasEntre(problema.reportado, e.creado_en);
       problema.resuelto = e.creado_en;
@@ -283,6 +372,30 @@ export function calcularReporte(
     }
   }
   for (const problema of abiertos.values()) problema.horasDetenido = redondear(horasEntre(problema.reportado, hasta));
+  for (const area of ORDEN_AREAS) avanzar(area, hasta);
+
+  // Cumplimiento: cuándo quedó listo cada pedido frente a lo que se le prometió al cliente al confirmar.
+  for (const p of pedidos) {
+    const salida = salidas.get(p.id);
+    if (!p.terminado || !salida || !enPeriodo(salida)) continue;
+    const prometido = originales.get(p.id) ?? p.fecha_prometida;
+    const listo = diaDe(salida);
+    entregas.push({
+      pedido: p.codigo,
+      cliente: p.cliente,
+      prometido,
+      reprogramado: reprogramados.has(p.id),
+      listo,
+      entregado: recojos.get(p.id) ?? null,
+      aTiempo: prometido ? listo <= prometido : null,
+    });
+  }
+  entregas.sort((a, b) => a.listo.localeCompare(b.listo));
+
+  const limite = [...cargaMezcla].sort((a, b) => b[1] - a[1])[0];
+  const capacidadPlanta =
+    limite && limite[1] > 0 ? { prendasDia: Math.round(prendasMezcla / limite[1]), limita: limite[0] } : null;
+  const horasDisponibles = horasDeTrabajo(desde, hasta);
 
   const meses = [...new Set(cubetas.map((c) => c.clave.slice(0, 7)))];
   const cuenta = new Map<string, number>();
@@ -298,7 +411,7 @@ export function calcularReporte(
     const medidos = suyos.filter((t) => t.horasReales !== null);
     const conEspera = suyos.filter((t) => t.horasEspera !== null);
     // La capacidad y su uso salen de todo lo producido; los tiempos, solo de lo medido.
-    const horasPlan = sumar(suyos, (t) => t.horasPlan);
+    const horasPlan = sumar(suyos, (t) => t.horasPlan - t.horasCompra);
     const prendas = sumar(suyos, (t) => t.cantidad);
 
     produccion[area] = cubetas.map(() => 0);
@@ -325,15 +438,15 @@ export function calcularReporte(
         : 0,
       detenidoMedio: medidos.length ? redondear(sumar(medidos, (t) => t.horasDetenido) / medidos.length) : 0,
       capacidadDia: horasPlan > 0 ? Math.round((prendas / horasPlan) * HORAS_POR_DIA) : null,
-      uso: diasHabiles ? horasPlan / (diasHabiles * HORAS_POR_DIA) : 0,
+      uso: horasDisponibles ? horasPlan / horasDisponibles : 0,
       problemas: susProblemas.length,
-      horasDetenida: redondear(sumar(susProblemas, (x) => x.horasDetenido)),
+      horasDetenida: redondear(paro.get(area) ?? 0),
     };
   });
 
   const entregasPorCubeta = cubetas.map(() => ({ aTiempo: 0, tarde: 0 }));
   for (const x of entregas) {
-    const i = indice(`${x.entregado}T12:00:00Z`);
+    const i = indice(`${x.listo}T12:00:00Z`);
     if (i !== undefined && x.aTiempo !== null) entregasPorCubeta[i][x.aTiempo ? "aTiempo" : "tarde"]++;
   }
 
@@ -351,6 +464,7 @@ export function calcularReporte(
     unidad,
     cubetas,
     produccion,
+    capacidadPlanta,
     entregasPorCubeta,
     meses,
     problemasPorMes,

@@ -51,7 +51,7 @@ export async function GET(request: Request) {
       { header: "Proceso medio por bloque (h)", key: "procesoMedio", width: 26 },
       { header: "Detenido medio por bloque (h)", key: "detenidoMedio", width: 28 },
       { header: "Problemas", key: "problemas", width: 12 },
-      { header: "Horas detenida", key: "horasDetenida", width: 16 },
+      { header: "Horas con algo detenido", key: "horasDetenida", width: 24 },
       { header: "Área crítica", key: "critica", width: 14 },
     ],
     r.areas.map((a) => ({
@@ -121,11 +121,17 @@ export async function GET(request: Request) {
     [
       { header: "Pedido", key: "pedido", width: 10 },
       { header: "Cliente", key: "cliente", width: 28 },
-      { header: "Prometido", key: "prometido", width: 12 },
-      { header: "Entregado", key: "entregado", width: 12 },
+      { header: "Prometido al confirmar", key: "prometido", width: 22 },
+      { header: "Reprogramado", key: "reprogramado", width: 14 },
+      { header: "Quedó listo", key: "listo", width: 12 },
       { header: "A tiempo", key: "aTiempo", width: 10 },
+      { header: "Entregado al cliente", key: "entregado", width: 20 },
     ],
-    r.entregas.map((x) => ({ ...x, aTiempo: x.aTiempo === null ? "" : x.aTiempo ? "Sí" : "No" })),
+    r.entregas.map((x) => ({
+      ...x,
+      reprogramado: x.reprogramado ? "Sí" : "",
+      aTiempo: x.aTiempo === null ? "" : x.aTiempo ? "Sí" : "No",
+    })),
   );
 
   hoja(
@@ -181,6 +187,7 @@ export async function GET(request: Request) {
       { header: "Horas detenido", key: "horasDetenido", width: 16 },
       { header: "Horas planificadas", key: "horasPlan", width: 20 },
       { header: "Diferencia (h)", key: "diferencia", width: 14 },
+      { header: "Horas de reloj (sin repartir)", key: "horasReloj", width: 26 },
     ],
     r.tramos.map((t) => ({
       ...t,

@@ -11,6 +11,8 @@ const pedidos: PedidoReporte[] = [
     cliente: "Clínica San Miguel",
     creado_en: lima(5, 8),
     fecha_prometida: "2026-10-07",
+    hay_tela: true,
+    terminado: false,
     items: [{ id: 10, producto: "polo-camisero", cantidad: 100 }],
     bloques: [
       { id: 100, item_id: 10, numero: 1, cantidad: 50, familia: "polo_camisero", ruta: ["corte", "bordado", "acabados"] },
@@ -23,6 +25,8 @@ const pedidos: PedidoReporte[] = [
     cliente: "Restaurante El Muelle",
     creado_en: lima(5, 8),
     fecha_prometida: "2026-10-06",
+    hay_tela: true,
+    terminado: false,
     items: [{ id: 20, producto: "mandil", cantidad: 30 }],
     bloques: [{ id: 200, item_id: 20, numero: 1, cantidad: 30, familia: "mandil", ruta: ["corte", "acabados"] }],
   },
@@ -50,7 +54,7 @@ describe("análisis de producción", () => {
     e("corte", "problema", lima(6, 9), 101, "Otro problema: se fue la luz"),
     // Lo que anota ventas sobre prioridad no es un problema de planta.
     e("ventas", "problema", lima(6, 9), null, "Marcado como urgente"),
-    // Entregas: una a tiempo (prometida el 7) y otra tarde (prometida el 6).
+    // Lo que anota ventas al entregar no dice cuándo terminó la planta.
     e("ventas", "terminar", lima(7, 10), null),
     e("ventas", "terminar", lima(7, 11), null, null, 2),
   ];
@@ -85,12 +89,8 @@ describe("análisis de producción", () => {
     expect(area("confeccion").capacidadDia).toBeNull();
   });
 
-  it("clasifica las entregas en a tiempo y tarde", () => {
-    expect(r.entregas.map((x) => [x.pedido, x.aTiempo])).toEqual([
-      ["P-0001", true],
-      ["P-0002", false],
-    ]);
-    expect(r.entregasPorCubeta[2]).toEqual({ aTiempo: 1, tarde: 1 });
+  it("la entrega al cliente no cuenta como cumplimiento si la planta no dejó listo el pedido", () => {
+    expect(r.entregas).toEqual([]);
   });
 
   it("cuenta problemas y horas detenidas por área, sin los apuntes de ventas", () => {
@@ -132,5 +132,97 @@ describe("análisis de producción", () => {
 
   it("sin movimientos no hay área crítica", () => {
     expect(calcularReporte(pedidos, [], lima(5, 0), lima(7, 16)).critica).toBeNull();
+  });
+});
+
+describe("análisis de producción: reparto del tiempo y cumplimiento", () => {
+  const dos: PedidoReporte[] = [
+    {
+      id: 1,
+      codigo: "P-0001",
+      cliente: "Clínica San Miguel",
+      creado_en: lima(5, 8),
+      // Se reprogramó: al confirmar se había prometido el 6.
+      fecha_prometida: "2026-10-09",
+      hay_tela: true,
+      terminado: true,
+      items: [{ id: 10, producto: "polo-camisero", cantidad: 100 }],
+      bloques: [
+        { id: 100, item_id: 10, numero: 1, cantidad: 50, familia: "polo_camisero", ruta: ["confeccion", "acabados"] },
+        { id: 101, item_id: 10, numero: 2, cantidad: 50, familia: "polo_camisero", ruta: ["confeccion", "acabados"] },
+      ],
+    },
+    {
+      id: 2,
+      codigo: "P-0002",
+      cliente: "Restaurante El Muelle",
+      creado_en: lima(5, 8),
+      fecha_prometida: "2026-10-10",
+      hay_tela: false,
+      terminado: true,
+      items: [{ id: 20, producto: "mandil", cantidad: 30 }],
+      bloques: [{ id: 200, item_id: 20, numero: 1, cantidad: 30, familia: "mandil", ruta: ["corte", "acabados"] }],
+    },
+  ];
+  const eventos = [
+    // Confección empieza los dos bloques juntos y los termina juntos: 16 h de reloj cada uno.
+    e("confeccion", "empezar", lima(5, 8), 100),
+    e("confeccion", "empezar", lima(5, 8), 101),
+    // Dos problemas que se pisan: de 10 a 12 y de 11 a 13. El área tuvo algo detenido 3 h, no 4.
+    e("confeccion", "problema", lima(5, 10), 100, "Falta personal"),
+    e("confeccion", "problema", lima(5, 11), 101, "Falta personal"),
+    e("confeccion", "resuelto", lima(5, 12), 100),
+    e("confeccion", "resuelto", lima(5, 13), 101),
+    e("confeccion", "terminar", lima(6, 16), 100),
+    e("confeccion", "terminar", lima(6, 16), 101),
+    e("ventas", "resuelto", lima(6, 9), null, "Fecha prometida: de 2026-10-06 a 2026-10-09"),
+    e("acabados", "empezar", lima(7, 8), 100),
+    e("acabados", "terminar", lima(7, 10), 100),
+    e("acabados", "empezar", lima(7, 10), 101),
+    e("acabados", "terminar", lima(7, 12), 101),
+    // Almacén sin tela: medio día de trabajo más 3 días de compra = 28 h planificadas.
+    e("almacen", "empezar", lima(5, 8), null, null, 2),
+    e("almacen", "terminar", lima(8, 12), null, null, 2),
+    e("acabados", "terminar", lima(9, 10), 200, null, 2),
+    e("ventas", "terminar", lima(10, 9), null, null, 2),
+  ];
+  const r = calcularReporte(dos, eventos, lima(5, 0), lima(10, 16));
+  const area = (id: string) => r.areas.find((a) => a.area === id)!;
+
+  it("reparte el tiempo entre los bloques que el área trabaja a la vez", () => {
+    const confeccion = r.tramos.filter((t) => t.area === "confeccion");
+    // Cada uno: 7,5 h de trabajo repartido + 2 h detenido, frente a 7,1 h planificadas.
+    expect(confeccion).toHaveLength(2);
+    for (const t of confeccion) expect(t).toMatchObject({ horasReloj: 16, horasReales: 9.5, horasDetenido: 2, horasPlan: 7.1 });
+    expect(area("confeccion")).toMatchObject({ horasReales: 19, procesoMedio: 7.5, detenidoMedio: 2 });
+  });
+
+  it("no suma doble el tiempo detenido de dos bloques a la vez", () => {
+    expect(area("confeccion").problemas).toBe(2);
+    expect(area("confeccion").horasDetenida).toBe(3);
+  });
+
+  it("en Almacén lo planificado incluye la compra de tela, pero la capacidad no", () => {
+    const almacen = r.tramos.find((t) => t.area === "almacen")!;
+    expect(almacen).toMatchObject({ horasReales: 28, horasPlan: 28, horasCompra: 24 });
+    expect(area("almacen")).toMatchObject({ horasDeRetraso: 0, retrasados: 0 });
+    // 30 prendas en medio día → 60 por día.
+    expect(area("almacen").capacidadDia).toBe(60);
+  });
+
+  it("mide el cumplimiento por el día en que quedó listo frente a la primera fecha prometida", () => {
+    expect(r.entregas).toEqual([
+      // Quedó listo el 7: a tiempo para la fecha reprogramada (9), tarde para la original (6).
+      { pedido: "P-0001", cliente: "Clínica San Miguel", prometido: "2026-10-06", reprogramado: true, listo: "2026-10-07", entregado: null, aTiempo: false },
+      // Listo el 9 y prometido el 10: a tiempo, lo recoja cuando lo recoja el cliente.
+      { pedido: "P-0002", cliente: "Restaurante El Muelle", prometido: "2026-10-10", reprogramado: false, listo: "2026-10-09", entregado: "2026-10-10", aTiempo: true },
+    ]);
+    expect(r.entregasPorCubeta[2]).toEqual({ aTiempo: 0, tarde: 1 });
+    expect(r.entregasPorCubeta[4]).toEqual({ aTiempo: 1, tarde: 0 });
+  });
+
+  it("la capacidad de la planta la fija el área más lenta para las prendas terminadas", () => {
+    // 130 prendas; Confección necesita 100 × 16 ÷ 900 = 1,78 días, más que ninguna otra área.
+    expect(r.capacidadPlanta).toEqual({ prendasDia: 73, limita: "confeccion" });
   });
 });
