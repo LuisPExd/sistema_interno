@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { Cabecera, Cargando } from "@/componentes/Cabecera";
+import { exigir } from "@/lib/acceso";
 import { fechaCorta, fechaHora } from "@/lib/formato";
 import { cargarTraza } from "@/lib/historial";
 
@@ -27,6 +28,7 @@ const ESTADO = {
 };
 
 async function Pedido({ params }: Props) {
+  await exigir("pedido");
   const traza = await cargarTraza((await params).codigo);
   if (!traza) notFound();
   const { pedido: p } = traza;

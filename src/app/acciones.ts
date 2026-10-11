@@ -1,6 +1,7 @@
 "use server";
 
 import { refresh, updateTag } from "next/cache";
+import { exigir } from "@/lib/acceso";
 import { diaHabil, hoyEnPeru } from "@/lib/calendario";
 import {
   MARGEN,
@@ -24,8 +25,10 @@ function actualizar() {
   refresh();
 }
 
-function exigirArea(area: string): AreaId {
+/** Valida el área y que quien toca tenga permiso sobre ella. */
+async function exigirArea(area: string): Promise<AreaId> {
   if (!ORDEN_AREAS.includes(area as AreaId)) throw new Error(`Área desconocida: ${area}`);
+  await exigir(area as AreaId);
   return area as AreaId;
 }
 
@@ -79,19 +82,19 @@ async function cambiarEstado(
 }
 
 export async function empezar(area: string, objetivo: Objetivo) {
-  await cambiarEstado(exigirArea(area), objetivo, "empezar", "en_cola", "en_proceso");
+  await cambiarEstado(await exigirArea(area), objetivo, "empezar", "en_cola", "en_proceso");
 }
 
 export async function reportarProblema(area: string, objetivo: Objetivo, motivo: string) {
-  await cambiarEstado(exigirArea(area), objetivo, "problema", "en_proceso", "detenido", motivo);
+  await cambiarEstado(await exigirArea(area), objetivo, "problema", "en_proceso", "detenido", motivo);
 }
 
 export async function resolverProblema(area: string, objetivo: Objetivo) {
-  await cambiarEstado(exigirArea(area), objetivo, "resuelto", "detenido", "en_proceso");
+  await cambiarEstado(await exigirArea(area), objetivo, "resuelto", "detenido", "en_proceso");
 }
 
 export async function terminar(areaCruda: string, objetivo: Objetivo) {
-  const area = exigirArea(areaCruda);
+  const area = await exigirArea(areaCruda);
   if (objetivo.tipo === "pedido") {
     const { data } = ok(
       await db()
@@ -172,6 +175,7 @@ async function estimarPedido(datos: DatosPedido): Promise<{ items: ItemCotizado[
 }
 
 export async function simularPedido(datos: DatosPedido): Promise<Respuesta<{ estimacion: Estimacion; urgentes: number }>> {
+  await exigir("ventas");
   try {
     const { estimacion, urgentes } = await estimarPedido(datos);
     return { ok: true, estimacion, urgentes };
@@ -181,6 +185,7 @@ export async function simularPedido(datos: DatosPedido): Promise<Respuesta<{ est
 }
 
 export async function crearPedido(datos: DatosPedido): Promise<Respuesta<{ codigo: string; fechaPrometida: string }>> {
+  await exigir("ventas");
   try {
     const nombre = datos.cliente.nombre.trim();
     if (!nombre) throw new ErrorDeDatos("Falta el nombre del cliente.");
@@ -259,6 +264,7 @@ export type CotizacionCargada = {
 };
 
 export async function buscarCotizacion(codigoCrudo: string): Promise<Respuesta<{ cotizacion: CotizacionCargada }>> {
+  await exigir("ventas");
   try {
     const digitos = codigoCrudo.replace(/\D/g, "");
     if (!digitos) throw new ErrorDeDatos("Escribe el código de la cotización, por ejemplo COT-1234.");
@@ -293,6 +299,7 @@ export async function buscarCotizacion(codigoCrudo: string): Promise<Respuesta<{
 }
 
 export async function entregarPedido(id: number) {
+  await exigir("ventas");
   const { data } = ok(
     await db().from("pedidos").update({ estado: "entregado" }).eq("id", id).eq("estado", "listo").select("id"),
   );
@@ -316,6 +323,7 @@ export type EfectoUrgente = {
 
 /** Calcula qué pasaría al cambiar la prioridad de un pedido, sin guardar nada. */
 export async function evaluarUrgente(id: number, urgente: boolean): Promise<Respuesta<{ efecto: EfectoUrgente }>> {
+  await exigir("decidir");
   try {
     const pedidos = await cargarPedidos(["confirmado", "en_produccion"]);
     const pedido = pedidos.find((p) => p.id === id);
@@ -347,6 +355,7 @@ export async function evaluarUrgente(id: number, urgente: boolean): Promise<Resp
 }
 
 export async function cambiarUrgente(id: number, urgente: boolean) {
+  await exigir("decidir");
   ok(await db().from("pedidos").update({ urgente }).eq("id", id));
   await anotar(id, "problema", urgente ? "Marcado como urgente" : "Vuelve a prioridad normal");
   actualizar();
@@ -354,6 +363,7 @@ export async function cambiarUrgente(id: number, urgente: boolean) {
 
 /** Mueve la fecha prometida al fin estimado más el margen mínimo, tras acordarlo con el cliente. */
 export async function reprogramar(id: number): Promise<Respuesta<{ fecha: string }>> {
+  await exigir("decidir");
   try {
     const pedidos = await cargarPedidos(["confirmado", "en_produccion"]);
     const pedido = pedidos.find((p) => p.id === id);

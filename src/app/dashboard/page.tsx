@@ -3,10 +3,12 @@ import { Suspense } from "react";
 import { Cabecera, Cargando } from "@/componentes/Cabecera";
 import { FilaPedido } from "@/componentes/FilaPedido";
 import { Refrescar } from "@/componentes/Refrescar";
+import { exigir } from "@/lib/acceso";
 import { hoyEnPeru } from "@/lib/calendario";
 import { horasEnTexto } from "@/lib/formato";
 import { CAPACIDAD_MENSUAL, historiaMensual } from "@/lib/historiaSimulada";
 import { cargarPlanta, type CargaArea, type Tarjeta } from "@/lib/planta";
+import { puede } from "@/lib/roles";
 import { AccionesPedido } from "./AccionesPedido";
 import { GraficaMensual } from "./GraficaMensual";
 
@@ -39,6 +41,8 @@ const ESTILO_ALERTA = {
 };
 
 async function Dashboard({ searchParams }: Props) {
+  const rol = await exigir("dashboard");
+  const decide = puede(rol, "decidir");
   const { ver } = await searchParams;
   const filtro = ver && ver in FILTROS ? (ver as Filtro) : null;
   const { pedidos, carga, alertas, tarjetas, urgentesActivos } = await cargarPlanta();
@@ -80,7 +84,7 @@ async function Dashboard({ searchParams }: Props) {
         <h2 className={titulo}>Qué pasa en cada área</h2>
         <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
           {carga.map((c) => (
-            <Area key={c.area} c={c} tarjetas={tarjetas[c.area]} />
+            <Area key={c.area} c={c} tarjetas={tarjetas[c.area]} entra={puede(rol, c.area)} />
           ))}
         </div>
       </section>
@@ -116,7 +120,7 @@ async function Dashboard({ searchParams }: Props) {
           )}
           {visibles.map((p) => (
             <FilaPedido key={p.id} p={p}>
-              {p.estado !== "listo" && (
+              {decide && p.estado !== "listo" && (
                 <AccionesPedido
                   id={p.id}
                   codigo={p.codigo}
@@ -154,7 +158,7 @@ function Cifra(props: { valor: number; texto: string; alerta?: boolean; filtro: 
 }
 
 /** Lo que el área tiene entre manos: qué procesa, con qué capacidad y cuándo se libera. */
-function Area({ c, tarjetas }: { c: CargaArea; tarjetas: Tarjeta[] }) {
+function Area({ c, tarjetas, entra }: { c: CargaArea; tarjetas: Tarjeta[]; entra: boolean }) {
   const enProceso = tarjetas.filter((t) => t.estado !== "en_cola");
   const enCola = tarjetas.filter((t) => t.estado === "en_cola");
   const prendasEnCola = enCola.reduce((n, t) => n + t.cantidad, 0);
@@ -171,9 +175,13 @@ function Area({ c, tarjetas }: { c: CargaArea; tarjetas: Tarjeta[] }) {
   return (
     <article className="rounded-2xl bg-white p-4 shadow-sm">
       <div className="flex items-center gap-3">
-        <Link href={`/area/${c.area}`} className="text-xl font-extrabold text-marca underline">
-          {c.nombre}
-        </Link>
+        {entra ? (
+          <Link href={`/area/${c.area}`} className="text-xl font-extrabold text-marca underline">
+            {c.nombre}
+          </Link>
+        ) : (
+          <span className="text-xl font-extrabold text-marca">{c.nombre}</span>
+        )}
         <span className={`rounded-full px-3 py-0.5 text-sm font-bold ${estado.color}`}>{estado.texto}</span>
         <Link href={`/area/${c.area}/historial`} className="ml-auto text-base font-semibold text-marca underline">
           Historial

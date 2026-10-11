@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { Cabecera, Cargando } from "@/componentes/Cabecera";
 import { FilaPedido } from "@/componentes/FilaPedido";
 import { Refrescar } from "@/componentes/Refrescar";
+import { exigir } from "@/lib/acceso";
 import { cargarPlanta } from "@/lib/planta";
 import { BotonEntregar } from "./BotonEntregar";
 
@@ -25,6 +26,7 @@ export default function PaginaVentas() {
 }
 
 async function Ventas() {
+  await exigir("ventas");
   const { pedidos } = await cargarPlanta();
   const listos = pedidos.filter((p) => p.estado === "listo");
   const activos = pedidos.filter((p) => p.estado !== "listo");

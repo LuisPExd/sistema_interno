@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { Cabecera, Cargando } from "@/componentes/Cabecera";
+import { exigir } from "@/lib/acceso";
 import { fechaCorta } from "@/lib/formato";
 import { cargarEntregados } from "@/lib/historial";
 
@@ -20,6 +21,7 @@ export default function PaginaEntregados() {
 }
 
 async function Entregados() {
+  await exigir("ventas");
   const pedidos = await cargarEntregados();
   const conFecha = pedidos.filter((p) => p.aTiempo !== null);
   const aTiempo = conFecha.filter((p) => p.aTiempo).length;

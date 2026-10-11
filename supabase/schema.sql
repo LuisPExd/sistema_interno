@@ -80,6 +80,14 @@ create table if not exists eventos (
 
 create index if not exists eventos_area on eventos (area, creado_en desc);
 
+-- PIN de entrada por área y por rol (almacen, corte, ..., ventas, jefe, gerencia, admin).
+-- El PIN se guarda cifrado; lo cambia el administrador en /accesos o con "npm run pines".
+create table if not exists accesos (
+  rol text primary key,
+  pin text not null,
+  actualizado_en timestamptz not null default now()
+);
+
 -- Diseños que sube el cliente en la web; se leen con enlaces temporales.
 insert into storage.buckets (id, name, public)
 values ('disenos', 'disenos', false)
@@ -91,3 +99,4 @@ alter table pedidos enable row level security;
 alter table pedido_items enable row level security;
 alter table bloques enable row level security;
 alter table eventos enable row level security;
+alter table accesos enable row level security;

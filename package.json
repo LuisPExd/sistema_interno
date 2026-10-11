@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "sembrar": "node --env-file=.env.local --import tsx scripts/sembrar.ts",
+    "pines": "node --env-file=.env.local --import tsx scripts/pines.ts",
     "produccion": "next build && next start"
   },
   "dependencies": {

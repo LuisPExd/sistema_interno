@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { Cabecera, Cargando } from "@/componentes/Cabecera";
 import { Refrescar } from "@/componentes/Refrescar";
+import { exigir } from "@/lib/acceso";
 import { AREAS, ORDEN_AREAS, type AreaId } from "@/lib/catalogo";
 import { cargarPlanta } from "@/lib/planta";
 import { TableroArea } from "./TableroArea";
@@ -21,6 +22,7 @@ async function Area({ params }: Props) {
   const { area } = await params;
   if (!ORDEN_AREAS.includes(area as AreaId)) notFound();
   const id = area as AreaId;
+  await exigir(id);
 
   const planta = await cargarPlanta();
   const carga = planta.carga.find((c) => c.area === id)!;

@@ -3,9 +3,11 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { Cabecera, Cargando } from "@/componentes/Cabecera";
 import { Refrescar } from "@/componentes/Refrescar";
+import { exigir, sesion } from "@/lib/acceso";
 import { AREAS, ORDEN_AREAS, type AreaId } from "@/lib/catalogo";
 import { fechaCorta, fechaHora } from "@/lib/formato";
 import { cargarHistorialArea } from "@/lib/historial";
+import { puede } from "@/lib/roles";
 
 type Props = { params: Promise<{ area: string }> };
 
@@ -29,6 +31,10 @@ async function Historial({ params }: Props) {
   const { area } = await params;
   if (!ORDEN_AREAS.includes(area as AreaId)) notFound();
   const id = area as AreaId;
+  // El historial solo se lee: también lo ve quien puede abrir el dashboard.
+  const rol = await sesion();
+  const delArea = rol !== null && puede(rol, id);
+  if (!delArea) await exigir("dashboard");
   const { movimientos, dias } = await cargarHistorialArea(id);
   const titulo = "text-xl font-bold text-gray-600 uppercase tracking-wide";
 
