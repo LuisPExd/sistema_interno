@@ -44,10 +44,15 @@ export async function salir() {
   redirect("/");
 }
 
-/** Solo el administrador. Las tabletas que usaban el PIN anterior tendrán que volver a entrar. */
+/**
+ * Solo el administrador, y nunca sobre su propio acceso: el PIN del administrador se cambia
+ * desde el servidor con "npm run pines -- admin", para que nadie que entre con él se lo quede.
+ * Las tabletas que usaban el PIN anterior tendrán que volver a entrar.
+ */
 export async function cambiarPin(rol: string, pin: string): Promise<Resultado> {
-  const quien = await exigir("accesos");
+  await exigir("accesos");
   if (!esRol(rol)) return { ok: false, error: "Ese acceso no existe." };
+  if (rol === "admin") return { ok: false, error: "El PIN del administrador no se cambia desde aquí." };
   if (!pinValido(pin)) return { ok: false, error: "El PIN debe tener 4 números." };
 
   const cifrado = await cifrarPin(pin);
@@ -61,7 +66,5 @@ export async function cambiarPin(rol: string, pin: string): Promise<Resultado> {
   updateTag(ETIQUETA_ACCESOS);
   refresh();
   borrarFallos(rol);
-  // Si el administrador cambia su propio PIN, sigue dentro con el nuevo.
-  if (rol === quien) await abrirSesion(rol, cifrado);
   return { ok: true };
 }

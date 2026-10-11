@@ -24,7 +24,8 @@ async function Accesos() {
     <main className="flex-1 p-5 max-w-3xl w-full mx-auto space-y-4">
       <p className="text-lg text-gray-700">
         Cada área y cada rol entra con su PIN de 4 números. El PIN guardado no se puede ver; si alguien lo olvida, pon
-        uno nuevo. Al cambiarlo, las tabletas que usaban el anterior tendrán que volver a entrar.
+        uno nuevo. Al cambiarlo, las tabletas que usaban el anterior tendrán que volver a entrar. El PIN del
+        administrador no se cambia desde esta pantalla.
       </p>
       {ROLES.map((rol) => (
         <article key={rol} className="rounded-2xl bg-white p-4 shadow-sm flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -34,7 +35,11 @@ async function Accesos() {
               {accesos[rol] ? `Último cambio: ${fechaHora(accesos[rol].actualizado)}` : "Sin PIN: nadie puede entrar"}
             </p>
           </div>
-          <CambiarPin rol={rol} />
+          {rol === "admin" ? (
+            <p className="ml-auto text-base font-semibold text-gray-600">Solo se cambia desde el servidor</p>
+          ) : (
+            <CambiarPin rol={rol} />
+          )}
         </article>
       ))}
     </main>

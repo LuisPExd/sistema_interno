@@ -86,7 +86,11 @@ export async function empezar(area: string, objetivo: Objetivo) {
 }
 
 export async function reportarProblema(area: string, objetivo: Objetivo, motivo: string) {
-  await cambiarEstado(await exigirArea(area), objetivo, "problema", "en_proceso", "detenido", motivo);
+  const areaValida = await exigirArea(area);
+  // El motivo se muestra en la tableta, el dashboard y las alertas: no se guarda vacío ni larguísimo.
+  const texto = String(motivo).trim().slice(0, 200);
+  if (!texto) throw new Error("Falta indicar el problema.");
+  await cambiarEstado(areaValida, objetivo, "problema", "en_proceso", "detenido", texto);
 }
 
 export async function resolverProblema(area: string, objetivo: Objetivo) {

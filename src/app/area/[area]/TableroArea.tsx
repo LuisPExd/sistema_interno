@@ -12,6 +12,9 @@ const MOTIVOS = [
   { texto: "Otro problema", icono: "❓" },
 ];
 
+const OTRO = "Otro problema";
+const MAX_DESCRIPCION = 150;
+
 type Cambio = { t: Tarjeta; estado: Tarjeta["estado"] | "fuera"; problema?: string };
 
 export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas: Tarjeta[] }) {
@@ -19,6 +22,22 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
   const HORAS_DIA = 8;
   const [, iniciar] = useTransition();
   const [conProblema, setConProblema] = useState<Tarjeta | null>(null);
+  // El problema se elige y luego se confirma, para no detener un bloque por un toque equivocado.
+  const [motivo, setMotivo] = useState<string | null>(null);
+  const [descripcion, setDescripcion] = useState("");
+  const cerrarProblema = () => {
+    setConProblema(null);
+    setMotivo(null);
+    setDescripcion("");
+  };
+  const faltaDescripcion = motivo === OTRO && descripcion.trim().length < 3;
+  const reportar = () => {
+    if (!conProblema || !motivo || faltaDescripcion) return;
+    const t = conProblema;
+    const texto = motivo === OTRO ? `${OTRO}: ${descripcion.trim()}` : motivo;
+    cerrarProblema();
+    hacer({ t, estado: "detenido", problema: texto }, () => reportarProblema(area, objetivo(t), texto));
+  };
 
   // El toque se refleja al instante; cuando el servidor responde, mandan sus datos.
   const [tarjetas, adelantar] = useOptimistic(reales, (lista, c: Cambio) =>
@@ -154,28 +173,56 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
             <p className="mt-1 text-xl text-gray-600">
               {conProblema.pedido} · {conProblema.titulo}
             </p>
-            <div className="mt-5 grid grid-cols-2 gap-4">
-              {MOTIVOS.map((m) => (
-                <button
-                  key={m.texto}
-                  onClick={() => {
-                    const t = conProblema;
-                    setConProblema(null);
-                    hacer({ t, estado: "detenido", problema: m.texto }, () =>
-                      reportarProblema(area, objetivo(t), m.texto),
-                    );
-                  }}
-                  className="rounded-2xl border-4 border-red-600 p-6 text-2xl font-bold text-red-700 active:bg-red-50"
-                >
-                  <span className="block text-5xl">{m.icono}</span>
-                  {m.texto}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => setConProblema(null)}
-              className="mt-5 w-full rounded-2xl bg-gray-200 py-4 text-2xl font-bold"
-            >
+            {motivo === null ? (
+              <div className="mt-5 grid grid-cols-2 gap-4">
+                {MOTIVOS.map((m) => (
+                  <button
+                    key={m.texto}
+                    onClick={() => setMotivo(m.texto)}
+                    className="rounded-2xl border-4 border-red-600 p-6 text-2xl font-bold text-red-700 active:bg-red-50"
+                  >
+                    <span className="block text-5xl">{m.icono}</span>
+                    {m.texto}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-5">
+                <p className="text-xl text-gray-600">Vas a detener este bloque por:</p>
+                <p className="mt-2 rounded-2xl border-4 border-red-600 p-5 text-3xl font-extrabold text-red-700">
+                  <span className="mr-3">{MOTIVOS.find((m) => m.texto === motivo)?.icono}</span>
+                  {motivo}
+                </p>
+                {motivo === OTRO && (
+                  <label className="mt-4 block text-xl font-bold">
+                    Describe el problema
+                    <textarea
+                      value={descripcion}
+                      onChange={(e) => setDescripcion(e.target.value.slice(0, MAX_DESCRIPCION))}
+                      rows={3}
+                      autoFocus
+                      placeholder="Por ejemplo: se fue la luz"
+                      className="mt-2 w-full rounded-2xl border-2 border-gray-400 p-4 text-2xl font-normal"
+                    />
+                  </label>
+                )}
+                <div className="mt-5 grid grid-cols-[1fr_2fr] gap-3">
+                  <button
+                    onClick={() => {
+                      setMotivo(null);
+                      setDescripcion("");
+                    }}
+                    className="rounded-2xl bg-gray-200 py-5 text-2xl font-bold"
+                  >
+                    Cambiar
+                  </button>
+                  <button onClick={reportar} disabled={faltaDescripcion} className={`${boton} bg-red-600`}>
+                    SÍ, REPORTAR
+                  </button>
+                </div>
+              </div>
+            )}
+            <button onClick={cerrarProblema} className="mt-5 w-full rounded-2xl bg-gray-200 py-4 text-2xl font-bold">
               Cancelar
             </button>
           </div>
