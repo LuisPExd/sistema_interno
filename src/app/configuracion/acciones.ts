@@ -4,6 +4,7 @@ import { refresh, updateTag } from "next/cache";
 import { exigir } from "@/lib/acceso";
 import { CLAVE_PLANTA, ETIQUETA_CONFIGURACION, completar } from "@/lib/configuracion";
 import { db } from "@/lib/db";
+import { borrarDemo, sembrarDemo } from "@/lib/demo";
 import { ETIQUETA_PLANTA } from "@/lib/planta";
 
 type Resultado = { ok: true } | { ok: false; error: string };
@@ -41,6 +42,32 @@ export async function restaurarConfiguracion(): Promise<Resultado> {
   if (error) {
     console.error(error);
     return { ok: false, error: SIN_TABLA };
+  }
+  actualizar();
+  return { ok: true };
+}
+
+/** Carga los pedidos de simulación (teléfono DEMO) para mostrar cómo funciona el sistema. No toca los reales. */
+export async function cargarDatosDemo(): Promise<Resultado> {
+  await exigir("configuracion");
+  try {
+    await sembrarDemo(db());
+  } catch (e) {
+    console.error(e);
+    return { ok: false, error: "No se pudieron cargar los datos de simulación." };
+  }
+  actualizar();
+  return { ok: true };
+}
+
+/** Borra solo los pedidos de simulación. */
+export async function borrarDatosDemo(): Promise<Resultado> {
+  await exigir("configuracion");
+  try {
+    await borrarDemo(db());
+  } catch (e) {
+    console.error(e);
+    return { ok: false, error: "No se pudieron borrar los datos de simulación." };
   }
   actualizar();
   return { ok: true };

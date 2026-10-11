@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import type { AreaConMinutos, FamiliaId, ValoresPlanta } from "@/lib/catalogo";
-import { guardarConfiguracion, restaurarConfiguracion } from "./acciones";
+import { borrarDatosDemo, cargarDatosDemo, guardarConfiguracion, restaurarConfiguracion } from "./acciones";
 
 type Limite = { min: number; max: number };
 type Props = {
@@ -160,6 +160,35 @@ export function FormularioConfiguracion({ valores, deFabrica, limites, areas, fa
               })}
             </tbody>
           </table>
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className={titulo}>Datos de simulación</h2>
+        <div className="rounded-2xl bg-white p-4 shadow-sm">
+          <p className="text-lg text-gray-700">
+            Carga unos 20 pedidos de ejemplo con 30 días de historia, para mostrar cómo funcionan las tabletas, el
+            dashboard y el análisis. No toca los pedidos reales. Mientras estén cargados, las fechas que se ofrecen a
+            los clientes salen más largas.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <button
+              type="button"
+              disabled={ocupado}
+              onClick={() => enviar(cargarDatosDemo, "Datos de simulación cargados")}
+              className="rounded-xl bg-marca px-5 py-3 text-lg font-bold text-white active:scale-95 disabled:opacity-50 max-sm:w-full"
+            >
+              {ocupado ? "Trabajando…" : "Agregar datos de simulación"}
+            </button>
+            <button
+              type="button"
+              disabled={ocupado}
+              onClick={() => enviar(borrarDatosDemo, "Datos de simulación borrados")}
+              className="rounded-xl bg-gray-200 px-5 py-3 text-lg font-bold active:scale-95 disabled:opacity-50 max-sm:w-full"
+            >
+              Borrar datos de simulación
+            </button>
+          </div>
         </div>
       </section>
 
