@@ -25,13 +25,14 @@ export function nombreRol(rol: Rol): string {
 }
 
 /** Zonas del sistema. Un área de planta se nombra con su propio id. */
-export type Zona = AreaId | "ventas" | "dashboard" | "decidir" | "pedido" | "configuracion" | "accesos";
+export type Zona = AreaId | "ventas" | "dashboard" | "decidir" | "pedido" | "reportes" | "configuracion" | "accesos";
 
 export function puede(rol: Rol, zona: Zona): boolean {
   if (rol === "admin") return true;
   if (zona === "accesos") return false;
   if (rol === "jefe" || zona === "pedido") return true;
   if (zona === "dashboard") return rol === "ventas" || rol === "gerencia";
+  if (zona === "reportes") return rol === "gerencia";
   // "decidir" son las acciones del dashboard: urgente y reprogramar. Gerencia solo mira.
   if (zona === "ventas" || zona === "decidir") return rol === "ventas";
   return rol === zona;

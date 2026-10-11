@@ -15,6 +15,28 @@ const MOTIVOS = [
 const OTRO = "Otro problema";
 const MAX_DESCRIPCION = 150;
 
+// Cada toque que mueve un bloque se confirma antes de guardarse.
+const CONFIRMAR = {
+  empezar: {
+    pregunta: "¿Seguro que quieres empezar?",
+    efecto: "El bloque pasa a estar en proceso y empieza a contar el tiempo.",
+    si: "SÍ, EMPEZAR",
+    color: "bg-marca",
+  },
+  terminar: {
+    pregunta: "¿Seguro que terminó el proceso?",
+    efecto: "El bloque sale de esta área y pasa a la siguiente. No se puede deshacer.",
+    si: "SÍ, TERMINÓ",
+    color: "bg-green-600",
+  },
+  resolver: {
+    pregunta: "¿Estás seguro de que ya se resolvió?",
+    efecto: "El bloque vuelve a estar en proceso.",
+    si: "SÍ, YA SE RESOLVIÓ",
+    color: "bg-marca",
+  },
+};
+
 type Cambio = { t: Tarjeta; estado: Tarjeta["estado"] | "fuera"; problema?: string };
 
 export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas: Tarjeta[] }) {
@@ -23,7 +45,7 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
   const [, iniciar] = useTransition();
   const [conProblema, setConProblema] = useState<Tarjeta | null>(null);
   // El problema se elige y luego se confirma, para no detener un bloque por un toque equivocado.
-  const [porResolver, setPorResolver] = useState<Tarjeta | null>(null);
+  const [porConfirmar, setPorConfirmar] = useState<{ t: Tarjeta; que: keyof typeof CONFIRMAR } | null>(null);
   const [motivo, setMotivo] = useState<string | null>(null);
   const [descripcion, setDescripcion] = useState("");
   const cerrarProblema = () => {
@@ -64,6 +86,14 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
   const prendasEnProceso = enProceso.reduce((n, t) => n + t.cantidad, 0);
 
   const objetivo = (t: Tarjeta) => ({ tipo: t.tipo, id: t.id, pedidoId: t.pedidoId });
+  const confirmar = () => {
+    if (!porConfirmar) return;
+    const { t, que } = porConfirmar;
+    setPorConfirmar(null);
+    if (que === "terminar") hacer({ t, estado: "fuera" }, () => terminar(area, objetivo(t)));
+    else if (que === "empezar") hacer({ t, estado: "en_proceso" }, () => empezar(area, objetivo(t)));
+    else hacer({ t, estado: "en_proceso" }, () => resolverProblema(area, objetivo(t)));
+  };
   const boton =
     "rounded-2xl px-6 py-5 text-2xl font-extrabold text-white shadow active:scale-95 disabled:opacity-50 transition";
 
@@ -108,7 +138,7 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
               <div className="mt-4 rounded-xl bg-red-50 p-4">
                 <p className="text-2xl font-bold text-red-700">Detenido: {t.problema ?? "problema"}</p>
                 <button
-                  onClick={() => setPorResolver(t)}
+                  onClick={() => setPorConfirmar({ t, que: "resolver" })}
                   className={`${boton} mt-3 w-full bg-marca`}
                 >
                   YA SE RESOLVIÓ
@@ -117,7 +147,7 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
             ) : (
               <div className="mt-4 grid grid-cols-[2fr_1fr] gap-3">
                 <button
-                  onClick={() => hacer({ t, estado: "fuera" }, () => terminar(area, objetivo(t)))}
+                  onClick={() => setPorConfirmar({ t, que: "terminar" })}
                   className={`${boton} bg-green-600`}
                 >
                   ✓ TERMINADO
@@ -142,7 +172,7 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
               </p>
             ) : (
               <button
-                onClick={() => hacer({ t: siguiente, estado: "en_proceso" }, () => empezar(area, objetivo(siguiente)))}
+                onClick={() => setPorConfirmar({ t: siguiente, que: "empezar" })}
                 className={`${boton} mt-4 w-full bg-marca`}
               >
                 ▶ EMPEZAR
@@ -167,30 +197,25 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
         )}
       </section>
 
-      {porResolver && (
+      {porConfirmar && (
         <div className="fixed inset-0 z-10 bg-black/60 p-6 flex items-center justify-center">
           <div className="w-full max-w-2xl rounded-3xl bg-white p-6">
-            <h2 className="text-3xl font-extrabold">¿Estás seguro de que ya se resolvió?</h2>
-            <p className="mt-1 text-xl text-gray-600">
-              {porResolver.pedido} · {porResolver.titulo}
-            </p>
-            <p className="mt-4 rounded-2xl bg-red-50 p-5 text-2xl font-bold text-red-700">
-              {porResolver.problema ?? "Problema"}
-            </p>
-            <p className="mt-3 text-xl text-gray-600">Si confirmas, el bloque vuelve a estar en proceso.</p>
+            <h2 className="text-3xl font-extrabold">{CONFIRMAR[porConfirmar.que].pregunta}</h2>
+            <p className="mt-3 text-2xl font-bold text-marca">{porConfirmar.t.pedido}</p>
+            <p className="text-2xl font-bold">{porConfirmar.t.titulo}</p>
+            <p className="text-xl text-gray-600">{porConfirmar.t.cantidad} prendas</p>
+            {porConfirmar.que === "resolver" && (
+              <p className="mt-4 rounded-2xl bg-red-50 p-5 text-2xl font-bold text-red-700">
+                {porConfirmar.t.problema ?? "Problema"}
+              </p>
+            )}
+            <p className="mt-3 text-xl text-gray-600">{CONFIRMAR[porConfirmar.que].efecto}</p>
             <div className="mt-5 grid grid-cols-[1fr_2fr] gap-3">
-              <button onClick={() => setPorResolver(null)} className="rounded-2xl bg-gray-200 py-5 text-2xl font-bold">
-                Todavía no
+              <button onClick={() => setPorConfirmar(null)} className="rounded-2xl bg-gray-200 py-5 text-2xl font-bold">
+                No
               </button>
-              <button
-                onClick={() => {
-                  const t = porResolver;
-                  setPorResolver(null);
-                  hacer({ t, estado: "en_proceso" }, () => resolverProblema(area, objetivo(t)));
-                }}
-                className={`${boton} bg-marca`}
-              >
-                SÍ, YA SE RESOLVIÓ
+              <button onClick={confirmar} className={`${boton} ${CONFIRMAR[porConfirmar.que].color}`}>
+                {CONFIRMAR[porConfirmar.que].si}
               </button>
             </div>
           </div>

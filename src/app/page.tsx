@@ -70,6 +70,7 @@ function Pantallas({ rol }: { rol: Rol }) {
   const oficina = [
     { zona: "ventas", href: "/ventas", icono: "🧾", texto: "Ventas" },
     { zona: "dashboard", href: "/dashboard", icono: "📊", texto: "Dashboard" },
+    { zona: "reportes", href: "/reportes", icono: "📑", texto: "Reportes" },
     { zona: "configuracion", href: "/configuracion", icono: "⚙️", texto: "Configuración" },
     { zona: "accesos", href: "/accesos", icono: "🔑", texto: "Accesos y PIN" },
   ] as const;
