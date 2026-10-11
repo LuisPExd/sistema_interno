@@ -95,12 +95,12 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
     else hacer({ t, estado: "en_proceso" }, () => resolverProblema(area, objetivo(t)));
   };
   const boton =
-    "rounded-2xl px-6 py-5 text-2xl font-extrabold text-white shadow active:scale-95 disabled:opacity-50 transition";
+    "rounded-2xl px-4 py-4 text-xl font-extrabold text-white shadow active:scale-95 disabled:opacity-50 transition sm:px-6 sm:py-5 sm:text-2xl";
 
   return (
-    <main className="flex-1 p-5 grid gap-6 lg:grid-cols-[3fr_2fr] content-start">
+    <main className="flex-1 p-3 sm:p-5 grid gap-4 sm:gap-6 lg:grid-cols-[3fr_2fr] content-start">
       <section className="lg:col-span-2 rounded-2xl bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-baseline gap-x-8 gap-y-1 text-xl">
+        <div className="flex flex-wrap items-baseline gap-x-8 gap-y-1 text-lg sm:text-xl">
           <span>
             En proceso: <b>{prendasEnProceso} prendas</b>
           </span>
@@ -122,21 +122,21 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
       <section className="space-y-4">
         <h2 className="text-xl font-bold text-gray-600 uppercase tracking-wide">En proceso</h2>
         {enProceso.length === 0 && (
-          <p className="rounded-2xl bg-white p-8 text-center text-2xl text-gray-500">
+          <p className="rounded-2xl bg-white p-5 text-center text-xl text-gray-500 sm:p-8 sm:text-2xl">
             No hay nada en proceso. Toca EMPEZAR en el siguiente.
           </p>
         )}
         {enProceso.map((t) => (
           <article
             key={`${t.tipo}-${t.id}`}
-            className={`rounded-2xl bg-white p-5 shadow border-l-[12px] ${
+            className={`rounded-2xl bg-white p-4 shadow border-l-8 sm:p-5 sm:border-l-[12px] ${
               t.estado === "detenido" ? "border-red-600" : "border-green-600"
             }`}
           >
             <Contenido t={t} grande />
             {t.estado === "detenido" ? (
               <div className="mt-4 rounded-xl bg-red-50 p-4">
-                <p className="text-2xl font-bold text-red-700">Detenido: {t.problema ?? "problema"}</p>
+                <p className="text-xl font-bold text-red-700 sm:text-2xl">Detenido: {t.problema ?? "problema"}</p>
                 <button
                   onClick={() => setPorConfirmar({ t, que: "resolver" })}
                   className={`${boton} mt-3 w-full bg-marca`}
@@ -145,7 +145,7 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
                 </button>
               </div>
             ) : (
-              <div className="mt-4 grid grid-cols-[2fr_1fr] gap-3">
+              <div className="mt-4 grid gap-3 sm:grid-cols-[2fr_1fr]">
                 <button
                   onClick={() => setPorConfirmar({ t, que: "terminar" })}
                   className={`${boton} bg-green-600`}
@@ -164,10 +164,10 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
       <section className="space-y-4">
         <h2 className="text-xl font-bold text-gray-600 uppercase tracking-wide">Siguiente</h2>
         {siguiente ? (
-          <article className="rounded-2xl bg-white p-5 shadow border-l-[12px] border-acento">
+          <article className="rounded-2xl bg-white p-4 shadow border-l-8 border-acento sm:p-5 sm:border-l-[12px]">
             <Contenido t={siguiente} grande />
             {llena ? (
-              <p className="mt-4 rounded-2xl bg-amber-100 p-4 text-center text-xl font-bold text-amber-900">
+              <p className="mt-4 rounded-2xl bg-amber-100 p-4 text-center text-lg font-bold text-amber-900 sm:text-xl">
                 El área está a su capacidad. Termina un bloque para empezar este.
               </p>
             ) : (
@@ -180,7 +180,7 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
             )}
           </article>
         ) : (
-          <p className="rounded-2xl bg-white p-8 text-center text-2xl text-gray-500">No hay nada en cola.</p>
+          <p className="rounded-2xl bg-white p-5 text-center text-xl text-gray-500 sm:p-8 sm:text-2xl">No hay nada en cola.</p>
         )}
 
         {enCola.length > 0 && (
@@ -198,20 +198,20 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
       </section>
 
       {porConfirmar && (
-        <div className="fixed inset-0 z-10 bg-black/60 p-6 flex items-center justify-center">
-          <div className="w-full max-w-2xl rounded-3xl bg-white p-6">
-            <h2 className="text-3xl font-extrabold">{CONFIRMAR[porConfirmar.que].pregunta}</h2>
-            <p className="mt-3 text-2xl font-bold text-marca">{porConfirmar.t.pedido}</p>
-            <p className="text-2xl font-bold">{porConfirmar.t.titulo}</p>
+        <div className="fixed inset-0 z-10 bg-black/60 p-3 flex items-center justify-center sm:p-6">
+          <div className="max-h-full w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-4 sm:p-6">
+            <h2 className="text-2xl font-extrabold sm:text-3xl">{CONFIRMAR[porConfirmar.que].pregunta}</h2>
+            <p className="mt-3 text-xl font-bold text-marca sm:text-2xl">{porConfirmar.t.pedido}</p>
+            <p className="text-xl font-bold sm:text-2xl">{porConfirmar.t.titulo}</p>
             <p className="text-xl text-gray-600">{porConfirmar.t.cantidad} prendas</p>
             {porConfirmar.que === "resolver" && (
-              <p className="mt-4 rounded-2xl bg-red-50 p-5 text-2xl font-bold text-red-700">
+              <p className="mt-4 rounded-2xl bg-red-50 p-4 text-xl font-bold text-red-700 sm:p-5 sm:text-2xl">
                 {porConfirmar.t.problema ?? "Problema"}
               </p>
             )}
-            <p className="mt-3 text-xl text-gray-600">{CONFIRMAR[porConfirmar.que].efecto}</p>
+            <p className="mt-3 text-lg text-gray-600 sm:text-xl">{CONFIRMAR[porConfirmar.que].efecto}</p>
             <div className="mt-5 grid grid-cols-[1fr_2fr] gap-3">
-              <button onClick={() => setPorConfirmar(null)} className="rounded-2xl bg-gray-200 py-5 text-2xl font-bold">
+              <button onClick={() => setPorConfirmar(null)} className="rounded-2xl bg-gray-200 py-4 text-xl font-bold sm:py-5 sm:text-2xl">
                 No
               </button>
               <button onClick={confirmar} className={`${boton} ${CONFIRMAR[porConfirmar.que].color}`}>
@@ -223,21 +223,21 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
       )}
 
       {conProblema && (
-        <div className="fixed inset-0 z-10 bg-black/60 p-6 flex items-center justify-center">
-          <div className="w-full max-w-2xl rounded-3xl bg-white p-6">
-            <h2 className="text-3xl font-extrabold">¿Qué pasó?</h2>
-            <p className="mt-1 text-xl text-gray-600">
+        <div className="fixed inset-0 z-10 bg-black/60 p-3 flex items-center justify-center sm:p-6">
+          <div className="max-h-full w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-4 sm:p-6">
+            <h2 className="text-2xl font-extrabold sm:text-3xl">¿Qué pasó?</h2>
+            <p className="mt-1 text-lg text-gray-600 sm:text-xl">
               {conProblema.pedido} · {conProblema.titulo}
             </p>
             {motivo === null ? (
-              <div className="mt-5 grid grid-cols-2 gap-4">
+              <div className="mt-4 grid grid-cols-2 gap-3 sm:mt-5 sm:gap-4">
                 {MOTIVOS.map((m) => (
                   <button
                     key={m.texto}
                     onClick={() => setMotivo(m.texto)}
-                    className="rounded-2xl border-4 border-red-600 p-6 text-2xl font-bold text-red-700 active:bg-red-50"
+                    className="rounded-2xl border-4 border-red-600 p-3 text-lg font-bold leading-tight text-red-700 active:bg-red-50 sm:p-6 sm:text-2xl"
                   >
-                    <span className="block text-5xl">{m.icono}</span>
+                    <span className="block text-4xl sm:text-5xl">{m.icono}</span>
                     {m.texto}
                   </button>
                 ))}
@@ -245,7 +245,7 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
             ) : (
               <div className="mt-5">
                 <p className="text-xl text-gray-600">Vas a detener este bloque por:</p>
-                <p className="mt-2 rounded-2xl border-4 border-red-600 p-5 text-3xl font-extrabold text-red-700">
+                <p className="mt-2 rounded-2xl border-4 border-red-600 p-4 text-2xl font-extrabold text-red-700 sm:p-5 sm:text-3xl">
                   <span className="mr-3">{MOTIVOS.find((m) => m.texto === motivo)?.icono}</span>
                   {motivo}
                 </p>
@@ -258,7 +258,7 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
                       rows={3}
                       autoFocus
                       placeholder="Por ejemplo: se fue la luz"
-                      className="mt-2 w-full rounded-2xl border-2 border-gray-400 p-4 text-2xl font-normal"
+                      className="mt-2 w-full rounded-2xl border-2 border-gray-400 p-3 text-xl font-normal sm:p-4 sm:text-2xl"
                     />
                   </label>
                 )}
@@ -268,7 +268,7 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
                       setMotivo(null);
                       setDescripcion("");
                     }}
-                    className="rounded-2xl bg-gray-200 py-5 text-2xl font-bold"
+                    className="rounded-2xl bg-gray-200 py-4 text-xl font-bold sm:py-5 sm:text-2xl"
                   >
                     Cambiar
                   </button>
@@ -278,7 +278,7 @@ export function TableroArea({ area, tarjetas: reales }: { area: string; tarjetas
                 </div>
               </div>
             )}
-            <button onClick={cerrarProblema} className="mt-5 w-full rounded-2xl bg-gray-200 py-4 text-2xl font-bold">
+            <button onClick={cerrarProblema} className="mt-4 w-full rounded-2xl bg-gray-200 py-3 text-xl font-bold sm:mt-5 sm:py-4 sm:text-2xl">
               Cancelar
             </button>
           </div>
@@ -292,16 +292,16 @@ function Contenido({ t, grande = false }: { t: Tarjeta; grande?: boolean }) {
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        <span className={`font-extrabold text-marca ${grande ? "text-2xl" : "text-lg"}`}>{t.pedido}</span>
+        <span className={`font-extrabold text-marca ${grande ? "text-xl sm:text-2xl" : "text-lg"}`}>{t.pedido}</span>
         {t.urgente && (
           <span className="rounded-full bg-red-600 px-3 py-1 text-base font-extrabold text-white">URGENTE</span>
         )}
-        <span className={`text-gray-600 truncate ${grande ? "text-xl" : "text-base"}`}>{t.cliente}</span>
+        <span className={`min-w-0 text-gray-600 truncate ${grande ? "text-lg sm:text-xl" : "text-base"}`}>{t.cliente}</span>
       </div>
-      <p className={`font-bold ${grande ? "mt-2 text-3xl" : "text-xl"}`}>{t.titulo}</p>
-      {t.detalle && <p className={`text-gray-700 ${grande ? "mt-1 text-xl" : "text-base"}`}>{t.detalle}</p>}
+      <p className={`font-bold ${grande ? "mt-2 text-2xl leading-tight sm:text-3xl" : "text-lg sm:text-xl"}`}>{t.titulo}</p>
+      {t.detalle && <p className={`text-gray-700 ${grande ? "mt-1 text-lg sm:text-xl" : "text-base"}`}>{t.detalle}</p>}
       {grande && (
-        <p className="mt-2 text-lg text-gray-600">
+        <p className="mt-2 text-base text-gray-600 sm:text-lg">
           Capacidad: <b>{t.capacidadDia} por día</b> · Debe tomar <b>{horasEnTexto(t.horasEsperadas)}</b>
           {t.estado !== "en_cola" && (
             <>

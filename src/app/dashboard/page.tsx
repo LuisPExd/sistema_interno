@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { Cabecera, Cargando } from "@/componentes/Cabecera";
 import { FilaPedido } from "@/componentes/FilaPedido";
+import { GirarPantalla } from "@/componentes/GirarPantalla";
 import { GraficaProduccion } from "@/componentes/GraficaProduccion";
 import { Refrescar } from "@/componentes/Refrescar";
 import { exigir } from "@/lib/acceso";
@@ -69,7 +70,7 @@ async function Dashboard({ searchParams }: Props) {
   const titulo = "text-xl font-bold text-gray-600 uppercase tracking-wide";
 
   return (
-    <main className="flex-1 p-5 space-y-6">
+    <main className="flex-1 p-3 sm:p-5 space-y-6">
       <Refrescar />
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-5">
@@ -93,7 +94,8 @@ async function Dashboard({ searchParams }: Props) {
           Prendas terminadas por día en las últimas dos semanas. La línea es lo que la planta puede sacar por día con esas
           prendas.
         </p>
-        <div className="mt-4 max-w-5xl">
+        <div className="mt-4 max-w-5xl space-y-3">
+          <GirarPantalla />
           <GraficaProduccion reporte={produccion} area="acabados" planta />
         </div>
       </figure>
@@ -163,7 +165,7 @@ function Cifra(props: { valor: number; texto: string; alerta?: boolean; filtro: 
   return (
     <Link
       href={filtro ? `/dashboard?ver=${filtro}#pedidos` : "/dashboard#pedidos"}
-      className={`block rounded-2xl p-4 shadow-sm active:scale-95 transition ${alerta ? "bg-red-600 text-white" : "bg-white"} ${
+      className={`block rounded-2xl p-4 shadow-sm active:scale-95 transition max-md:last:col-span-2 ${alerta ? "bg-red-600 text-white" : "bg-white"} ${
         elegida ? "ring-4 ring-acento" : ""
       }`}
     >

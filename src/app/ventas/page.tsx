@@ -33,7 +33,7 @@ async function Ventas() {
   const titulo = "text-xl font-bold text-gray-600 uppercase tracking-wide";
 
   return (
-    <main className="flex-1 p-5 max-w-5xl w-full mx-auto space-y-6">
+    <main className="flex-1 p-3 sm:p-5 max-w-5xl w-full mx-auto space-y-6">
       <Refrescar />
 
       <section className="space-y-3">

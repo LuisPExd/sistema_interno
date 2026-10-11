@@ -21,7 +21,7 @@ async function Accesos() {
   const accesos = await leerAccesos();
 
   return (
-    <main className="flex-1 p-5 max-w-3xl w-full mx-auto space-y-4">
+    <main className="flex-1 p-3 sm:p-5 max-w-3xl w-full mx-auto space-y-4">
       <p className="text-lg text-gray-700">
         Cada área y cada rol entra con su PIN de 4 números. El PIN guardado no se puede ver; si alguien lo olvida, pon
         uno nuevo. Al cambiarlo, las tabletas que usaban el anterior tendrán que volver a entrar. El PIN del

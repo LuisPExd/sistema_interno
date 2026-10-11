@@ -13,5 +13,7 @@ body {
   color: #111827;
   /* Las tabletas no deben seleccionar texto ni hacer zoom al tocar dos veces. */
   touch-action: manipulation;
+  /* Nada debe empujar la página hacia los lados en un teléfono. */
+  overflow-x: clip;
   -webkit-tap-highlight-color: transparent;
 }

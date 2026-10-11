@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { Cabecera, Cargando } from "@/componentes/Cabecera";
+import { GirarPantalla } from "@/componentes/GirarPantalla";
 import { GraficaColumnas } from "@/componentes/GraficaColumnas";
 import { GraficaProduccion } from "@/componentes/GraficaProduccion";
 import { exigir } from "@/lib/acceso";
@@ -135,7 +136,8 @@ async function Analisis({ searchParams }: Props) {
   const th = "py-1 pr-3 font-semibold";
 
   return (
-    <main className="flex-1 p-5 max-w-7xl w-full mx-auto space-y-8">
+    <main className="flex-1 p-3 sm:p-5 max-w-7xl w-full mx-auto space-y-6 sm:space-y-8">
+      <GirarPantalla />
       {/* Filtros: una sola fila arriba; valen para toda la pantalla. */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -159,7 +161,7 @@ async function Analisis({ searchParams }: Props) {
         </div>
         <a
           href={`/reportes/exportar?periodo=${periodo}`}
-          className="ml-auto rounded-xl bg-green-700 px-5 py-2 text-lg font-bold text-white active:scale-95"
+          className="rounded-xl bg-green-700 px-5 py-2 text-center text-lg font-bold text-white active:scale-95 max-sm:w-full sm:ml-auto"
         >
           Descargar Excel
         </a>
@@ -181,12 +183,6 @@ async function Analisis({ searchParams }: Props) {
             tono={tarde > 0 ? "alerta" : "bien"}
           />
           <Cifra
-            etiqueta="Cuello de botella"
-            valor={hayCuello ? cuello.nombre : "—"}
-            detalle={hayCuello ? `${dias(cuello.dias)} de trabajo acumulado` : "sin trabajo acumulado"}
-            tono={hayCuello && cuello.dias >= 3 ? "alerta" : "normal"}
-          />
-          <Cifra
             etiqueta={`Aceptado frente a capacidad, ${PERIODOS[periodo].nombre}`}
             valor={razon === null ? "—" : `${Math.round(razon * 100)} %`}
             detalle={d && razon !== null ? `${dias(d.diasNecesarios)} de ${nombreDe[d.limita]} en ${dias(r.diasTrabajados)}` : "sin pedidos aceptados"}
@@ -197,6 +193,12 @@ async function Analisis({ searchParams }: Props) {
             valor={conFecha.length ? `${Math.round((aTiempo / conFecha.length) * 100)} %` : "—"}
             detalle={conFecha.length ? `${aTiempo} de ${conFecha.length}` : "ninguno quedó listo"}
             tono={conFecha.length === 0 ? "normal" : aTiempo === conFecha.length ? "bien" : "alerta"}
+          />
+          <Cifra
+            etiqueta="Cuello de botella"
+            valor={hayCuello ? cuello.nombre : "—"}
+            detalle={hayCuello ? `${dias(cuello.dias)} de trabajo acumulado` : "sin trabajo acumulado"}
+            tono={hayCuello && cuello.dias >= 3 ? "alerta" : "normal"}
           />
         </div>
 

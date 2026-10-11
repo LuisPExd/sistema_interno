@@ -27,7 +27,7 @@ async function Entregados() {
   const aTiempo = conFecha.filter((p) => p.aTiempo).length;
 
   return (
-    <main className="flex-1 p-5 max-w-5xl w-full mx-auto space-y-4">
+    <main className="flex-1 p-3 sm:p-5 max-w-5xl w-full mx-auto space-y-4">
       <p className="text-xl">
         <b>{pedidos.length}</b> pedidos entregados
         {conFecha.length > 0 && (

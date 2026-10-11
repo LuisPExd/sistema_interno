@@ -150,10 +150,10 @@ export function FormularioPedido({ productos }: { productos: ProductoOpcion[] })
 
   if (creado) {
     return (
-      <main className="flex-1 p-6 max-w-2xl w-full mx-auto text-center">
-        <div className="rounded-3xl bg-white p-8 shadow">
+      <main className="flex-1 p-4 sm:p-6 max-w-2xl w-full mx-auto text-center">
+        <div className="rounded-3xl bg-white p-5 shadow sm:p-8">
           <p className="text-6xl">✅</p>
-          <h2 className="mt-3 text-3xl font-extrabold">Pedido {creado.codigo} registrado</h2>
+          <h2 className="mt-3 text-2xl font-extrabold sm:text-3xl">Pedido {creado.codigo} registrado</h2>
           <p className="mt-2 text-xl text-gray-700">
             Fecha de entrega prometida: <b>{fechaCorta(creado.fecha)}</b>
           </p>
@@ -175,7 +175,7 @@ export function FormularioPedido({ productos }: { productos: ProductoOpcion[] })
   const limiteUrgentes = urgente && estimacion !== null && urgentes >= MAX_URGENTES_ACTIVOS;
 
   return (
-    <main className="flex-1 p-5 max-w-4xl w-full mx-auto space-y-5">
+    <main className="flex-1 p-3 sm:p-5 max-w-4xl w-full mx-auto space-y-5">
       <section className={tarjeta}>
         <h2 className="text-xl font-bold">¿Viene de la página web?</h2>
         <div className="mt-2 flex gap-3">
@@ -302,7 +302,7 @@ export function FormularioPedido({ productos }: { productos: ProductoOpcion[] })
                       onChange={(e) =>
                         editar(l.clave, { tallas: { ...l.tallas, [t]: e.target.value.replace(/\D/g, "") } })
                       }
-                      className={`${campo} text-center`}
+                      className={`${campo} px-1! text-center`}
                     />
                   ))}
                 </div>
@@ -344,9 +344,9 @@ export function FormularioPedido({ productos }: { productos: ProductoOpcion[] })
       {estimacion && (
         <section className={`${tarjeta} border-4 border-marca`}>
           <p className="text-lg text-gray-600">Entrega estimada</p>
-          <p className="text-4xl font-extrabold text-marca">
+          <p className="text-3xl font-extrabold text-marca sm:text-4xl">
             {fechaCorta(estimacion.fecha_estimada)}{" "}
-            <span className="text-2xl font-bold text-gray-700">· {estimacion.dias_habiles} días hábiles</span>
+            <span className="text-xl font-bold text-gray-700 whitespace-nowrap sm:text-2xl">· {estimacion.dias_habiles} días hábiles</span>
           </p>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {estimacion.detalle.map((d) => (

@@ -46,27 +46,33 @@ async function Historial({ params }: Props) {
           Volver al área
         </Link>
       </Cabecera>
-      <main className="flex-1 p-5 max-w-5xl w-full mx-auto space-y-6">
+      <main className="flex-1 p-3 sm:p-5 max-w-5xl w-full mx-auto space-y-6">
         <section className="space-y-3">
           <h2 className={titulo}>Por día</h2>
           {dias.length === 0 ? (
             <p className="rounded-2xl bg-white p-5 text-lg text-gray-500">Todavía no hay movimientos.</p>
           ) : (
-            <div className="rounded-2xl bg-white shadow-sm overflow-hidden">
-              <table className="w-full text-lg">
+            <div className="rounded-2xl bg-white shadow-sm overflow-x-auto">
+              <table className="w-full text-base sm:text-lg">
                 <thead className="bg-marca-suave text-left">
                   <tr>
-                    <th className="px-4 py-2">Día</th>
-                    <th className="px-4 py-2 text-right">Prendas que llegaron</th>
-                    <th className="px-4 py-2 text-right">Prendas que salieron</th>
+                    <th className="px-3 py-2 sm:px-4">Día</th>
+                    <th className="px-3 py-2 text-right sm:px-4">
+                      <span className="max-sm:hidden">Prendas que llegaron</span>
+                      <span className="sm:hidden">Llegaron</span>
+                    </th>
+                    <th className="px-3 py-2 text-right sm:px-4">
+                      <span className="max-sm:hidden">Prendas que salieron</span>
+                      <span className="sm:hidden">Salieron</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {dias.map((d) => (
                     <tr key={d.fecha} className="border-t border-gray-200">
-                      <td className="px-4 py-2 font-semibold">{fechaCorta(d.fecha)}</td>
-                      <td className="px-4 py-2 text-right">{d.llegaron}</td>
-                      <td className="px-4 py-2 text-right font-bold">{d.terminaron}</td>
+                      <td className="px-3 py-2 font-semibold sm:px-4">{fechaCorta(d.fecha)}</td>
+                      <td className="px-3 py-2 text-right sm:px-4">{d.llegaron}</td>
+                      <td className="px-3 py-2 text-right font-bold sm:px-4">{d.terminaron}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -78,7 +84,7 @@ async function Historial({ params }: Props) {
         <section className="space-y-3">
           <h2 className={titulo}>Movimientos ({movimientos.length})</h2>
           {movimientos.map((m, i) => (
-            <div key={i} className="rounded-xl bg-white p-3 shadow-sm flex flex-wrap items-center gap-x-4 gap-y-1 text-lg">
+            <div key={i} className="rounded-xl bg-white p-3 shadow-sm flex flex-wrap items-center gap-x-3 gap-y-1 text-base sm:gap-x-4 sm:text-lg">
               <span className={`rounded-lg px-3 py-1 font-bold ${COLOR[m.que]}`}>{m.que}</span>
               <Link href={`/pedido/${m.pedido}`} className="font-extrabold text-marca underline">
                 {m.pedido}

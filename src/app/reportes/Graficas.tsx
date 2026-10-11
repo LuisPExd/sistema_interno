@@ -26,8 +26,8 @@ export function Figura({
   className?: string;
 }) {
   return (
-    <figure className={`rounded-2xl bg-white p-5 shadow-sm ${className}`}>
-      <figcaption className="text-xl font-extrabold text-gray-900">{titulo}</figcaption>
+    <figure className={`min-w-0 rounded-2xl bg-white p-3 shadow-sm sm:p-5 ${className}`}>
+      <figcaption className="text-lg font-extrabold leading-tight text-gray-900 sm:text-xl">{titulo}</figcaption>
       {nota && <p className="mt-0.5 text-base text-gray-600">{nota}</p>}
       <div className="mt-4">{children}</div>
     </figure>
@@ -64,9 +64,9 @@ export function Cifra({
 }) {
   const borde = { normal: "border-gray-200", alerta: "border-red-600", bien: "border-green-600" }[tono];
   return (
-    <div className={`rounded-2xl border-l-8 bg-white p-4 shadow-sm ${borde}`}>
+    <div className={`rounded-2xl border-l-8 bg-white p-4 shadow-sm max-lg:last:col-span-2 ${borde}`}>
       <p className="text-base font-semibold text-gray-600">{etiqueta}</p>
-      <p className="mt-1 text-4xl font-extrabold leading-tight text-gray-900">{valor}</p>
+      <p className="mt-1 text-3xl font-extrabold leading-tight text-gray-900 sm:text-4xl">{valor}</p>
       <p className="mt-1 text-base text-gray-700">{detalle}</p>
     </div>
   );

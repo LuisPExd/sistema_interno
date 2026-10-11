@@ -48,7 +48,7 @@ export function FormularioConfiguracion({ valores, deFabrica, limites, areas, fa
 
   return (
     <form
-      className="flex-1 p-5 max-w-5xl w-full mx-auto space-y-6"
+      className="flex-1 p-3 sm:p-5 max-w-5xl w-full mx-auto space-y-6"
       onSubmit={(e) => {
         e.preventDefault();
         enviar(() => guardarConfiguracion(v), "Cambios guardados");
@@ -163,13 +163,13 @@ export function FormularioConfiguracion({ valores, deFabrica, limites, areas, fa
         </div>
       </section>
 
-      <div className="sticky bottom-0 flex flex-wrap items-center gap-3 rounded-2xl bg-white p-4 shadow">
+      <div className="sticky bottom-0 flex flex-wrap items-center gap-3 rounded-2xl bg-white p-3 shadow sm:p-4">
         {aviso && (
           <span className={`text-lg font-bold ${aviso.bien ? "text-green-700" : "text-red-700"}`} role="status">
             {aviso.texto}
           </span>
         )}
-        <div className="ml-auto flex flex-wrap items-center gap-3">
+        <div className="flex w-full flex-wrap items-center justify-center gap-3 sm:ml-auto sm:w-auto sm:justify-end">
           {confirmaRestaurar ? (
             <>
               <span className="text-lg font-bold">¿Volver a los valores originales?</span>

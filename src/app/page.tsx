@@ -21,12 +21,14 @@ const ICONOS: Record<Rol, string> = {
 };
 
 const tecla =
-  "rounded-3xl bg-white p-6 text-center shadow active:scale-95 transition flex flex-col items-center justify-center gap-2 min-h-36";
+  "rounded-3xl bg-white p-3 text-center shadow active:scale-95 transition flex flex-col items-center justify-center gap-2 min-h-28 sm:p-6 sm:min-h-36 " +
+  // En teléfono van de dos en dos; si sobra una, ocupa toda la fila para que no quede coja.
+  "max-sm:last:odd:col-span-2";
 
 export default function Inicio() {
   return (
-    <main className="flex-1 p-6 max-w-5xl w-full mx-auto">
-      <h1 className="text-4xl font-extrabold text-marca">Corpotex Planta</h1>
+    <main className="flex-1 p-4 sm:p-6 max-w-5xl w-full mx-auto">
+      <h1 className="text-center text-3xl font-extrabold text-marca sm:text-left sm:text-4xl">Corpotex Planta</h1>
       <Suspense fallback={<Cargando />}>
         <Opciones />
       </Suspense>
@@ -44,20 +46,20 @@ function Entrada() {
   const oficina = ROLES.filter((r) => !esArea(r));
   return (
     <>
-      <p className="mt-1 text-xl text-gray-600">Elige tu área</p>
-      <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <p className="mt-1 text-center text-xl text-gray-600 sm:text-left">Elige tu área</p>
+      <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
         {ORDEN_AREAS.map((a) => (
           <Link key={a} href={`/entrar/${a}`} className={tecla}>
-            <span className="text-5xl">{ICONOS[a]}</span>
-            <span className="text-2xl font-bold">{nombreRol(a)}</span>
+            <span className="text-4xl sm:text-5xl">{ICONOS[a]}</span>
+            <span className="text-lg font-bold leading-tight sm:text-2xl">{nombreRol(a)}</span>
           </Link>
         ))}
       </div>
-      <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
         {oficina.map((r) => (
           <Link key={r} href={`/entrar/${r}`} className={`${tecla} bg-marca! text-white`}>
-            <span className="text-5xl">{ICONOS[r]}</span>
-            <span className="text-2xl font-bold">{nombreRol(r)}</span>
+            <span className="text-4xl sm:text-5xl">{ICONOS[r]}</span>
+            <span className="text-lg font-bold leading-tight sm:text-2xl">{nombreRol(r)}</span>
           </Link>
         ))}
       </div>
@@ -79,11 +81,11 @@ function Pantallas({ rol }: { rol: Rol }) {
 
   return (
     <>
-      <div className="mt-1 flex flex-wrap items-center gap-4">
+      <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 sm:justify-start">
         <p className="text-xl text-gray-600">
           Entraste como <b>{nombreRol(rol)}</b>
         </p>
-        <form action={salir} className="ml-auto">
+        <form action={salir} className="sm:ml-auto">
           <button className="rounded-xl bg-white px-5 py-3 text-lg font-bold text-marca shadow active:scale-95">
             Salir
           </button>
@@ -91,21 +93,21 @@ function Pantallas({ rol }: { rol: Rol }) {
       </div>
 
       {visibles.length > 0 && (
-        <div className="mt-6 grid grid-cols-2 gap-4">
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-4">
           {visibles.map((o) => (
             <Link key={o.href} href={o.href} className={`${tecla} bg-marca! text-white`}>
-              <span className="text-5xl">{o.icono}</span>
-              <span className="text-3xl font-extrabold">{o.texto}</span>
+              <span className="text-4xl sm:text-5xl">{o.icono}</span>
+              <span className="text-lg font-extrabold leading-tight sm:text-3xl">{o.texto}</span>
             </Link>
           ))}
         </div>
       )}
 
-      <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
         {areas.map((a) => (
           <Link key={a} href={`/area/${a}`} className={tecla}>
-            <span className="text-5xl">{ICONOS[a]}</span>
-            <span className="text-2xl font-bold">{nombreRol(a)}</span>
+            <span className="text-4xl sm:text-5xl">{ICONOS[a]}</span>
+            <span className="text-lg font-bold leading-tight sm:text-2xl">{nombreRol(a)}</span>
           </Link>
         ))}
       </div>

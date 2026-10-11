@@ -17,7 +17,7 @@ export function CambiarPin({ rol }: { rol: string }) {
 
   return (
     <form
-      className="ml-auto flex flex-wrap items-center gap-3"
+      className="flex w-full flex-wrap items-center gap-3 sm:ml-auto sm:w-auto"
       onSubmit={(e) => {
         e.preventDefault();
         guardar();
@@ -38,7 +38,7 @@ export function CambiarPin({ rol }: { rol: string }) {
         autoComplete="off"
         placeholder="Nuevo PIN"
         aria-label="Nuevo PIN de 4 números"
-        className="w-36 rounded-xl border-2 border-gray-300 px-3 py-2 text-center text-xl tracking-widest"
+        className="min-w-0 flex-1 rounded-xl border-2 sm:w-36 sm:flex-none border-gray-300 px-3 py-2 text-center text-xl tracking-widest"
       />
       <button
         disabled={ocupado || pin.length !== 4}

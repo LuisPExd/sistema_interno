@@ -27,10 +27,10 @@ export function Teclado({ rol }: { rol: string }) {
   };
 
   const tecla =
-    "h-24 rounded-3xl bg-white text-4xl font-extrabold text-marca shadow active:scale-95 disabled:opacity-50 transition";
+    "h-20 sm:h-24 rounded-3xl bg-white text-4xl font-extrabold text-marca shadow active:scale-95 disabled:opacity-50 transition";
 
   return (
-    <main className="flex-1 p-6 w-full max-w-md mx-auto text-center">
+    <main className="flex-1 p-4 sm:p-6 w-full max-w-md mx-auto text-center">
       <p className="text-2xl font-bold text-gray-700">Escribe tu PIN</p>
 
       <div className="mt-5 flex justify-center gap-4" aria-label={`${pin.length} de ${LARGO} números`}>
